@@ -1,7 +1,12 @@
 const { DecodeToken } = require("../utility/tokenUtility");
 
 const authVerification = (req, res, next) => {
+    // Support cookie token OR Authorization: Bearer <token> header (useful for Postman)
     let token = req.cookies["token"];
+    if (!token && req.headers["authorization"]) {
+        const parts = req.headers["authorization"].split(" ");
+        if (parts.length === 2 && parts[0] === "Bearer") token = parts[1];
+    }
 
     let decoded = DecodeToken(token);
 

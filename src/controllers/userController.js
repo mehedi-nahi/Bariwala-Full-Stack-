@@ -38,17 +38,19 @@ exports.login = async (req, res) => {
 
         let token = EncodeToken(user.email, user._id.toString(), user.role);
 
+        let isProduction = process.env.NODE_ENV === "production";
         let option = {
             maxAge:   parseInt(process.env.COOKIE_EXPIRE) * 24 * 60 * 60 * 1000,
             httpOnly: true,
-            sameSite: "none",
-            secure:   true
+            sameSite: isProduction ? "none" : "lax",
+            secure:   isProduction
         };
 
         res.cookie("token", token, option);
         res.status(200).json({
             success: true,
             message: "Login successful",
+            token: token,
             data: { id: user._id, email: user.email, role: user.role, name: user.name }
         });
     } catch (e) {

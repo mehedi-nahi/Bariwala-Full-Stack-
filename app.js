@@ -1,5 +1,5 @@
 const dotENV = require("dotenv");
-dotENV.config();
+dotENV.config({ quiet: true });
 
 const express        = require("express");
 const rateLimit      = require("express-rate-limit");
@@ -19,7 +19,15 @@ connectDB();
 
 app.use(cookieParser());
 app.use(helmet());
-app.use(mongoSanitize());
+// express-mongo-sanitize tries to overwrite req.query which is read-only in Express v5
+// Manually sanitize only body and params
+const mongoSanitizeMiddleware = (req, res, next) => {
+    const opts = { allowDots: true, replaceWith: '_' };
+    if (req.body)   req.body   = mongoSanitize.sanitize(req.body,   opts);
+    if (req.params) req.params = mongoSanitize.sanitize(req.params, opts);
+    next();
+};
+app.use(mongoSanitizeMiddleware);
 app.use(hpp());
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "10mb" }));

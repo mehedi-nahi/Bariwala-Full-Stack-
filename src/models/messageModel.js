@@ -1,11 +1,17 @@
 const mongoose = require("mongoose");
 
 const DataSchema = new mongoose.Schema({
-    // conversation participants
+    // conversation context — property for rental, item for marketplace
     property: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "properties",
-        required: true
+        default: null
+    },
+    // marketplace item context (optional)
+    item: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "marketplaces",
+        default: null
     },
     sender: {
         type: mongoose.Schema.Types.ObjectId,

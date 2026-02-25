@@ -1,5 +1,15 @@
+# Backend
 node_modules/
 .env
 uploads/*
 !uploads/.gitkeep
 
+# Frontend build
+client/dist/
+client/dist-ssr/
+
+# OS / IDE
+.DS_Store
+.idea/
+*.local
+*.log

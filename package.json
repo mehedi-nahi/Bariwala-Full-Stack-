@@ -4,7 +4,10 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js",
+    "dev": "(nodemon index.js &) && cd client && npm run dev",
+    "server": "nodemon index.js",
+    "client": "cd client && npm run dev",
+    "seed": "node demo_data/seed.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -12,10 +15,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "20": "^3.1.9",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
+    "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.2.1",

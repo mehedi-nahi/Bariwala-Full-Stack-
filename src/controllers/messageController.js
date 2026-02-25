@@ -5,10 +5,11 @@ const messageModel  = require("../models/messageModel");
 exports.sendMessage = async (req, res) => {
     try {
         let senderId = req.headers._id;
-        let { propertyId, receiverId, message } = req.body;
+        let { propertyId, itemId, receiverId, message } = req.body;
 
         let data = await messageModel.create({
-            property: propertyId,
+            property: propertyId || null,
+            item:     itemId     || null,
             sender:   senderId,
             receiver: receiverId,
             message
