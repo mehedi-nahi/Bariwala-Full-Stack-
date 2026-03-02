@@ -1,10 +1,17 @@
 const mongoose          = require("mongoose");
 const marketplaceModel  = require("../models/marketplaceModel");
 
-// Create Item
+// Create Item (tenant or landlord can post)
 exports.createItem = async (req, res) => {
     try {
-        let sellerId = req.headers._id;
+        let sellerId   = req.headers._id;
+        let sellerRole = req.headers.role;
+
+        // Only marketplace users can post items
+        if (sellerRole !== "marketplace") {
+            return res.status(403).json({ success: false, message: "Only marketplace users can post items." });
+        }
+
         let { title, description, price, condition } = req.body;
 
         let images = req.files ? req.files.map(f => f.filename) : [];
@@ -89,12 +96,42 @@ exports.singleItem = async (req, res) => {
     }
 };
 
-// My Items (seller)
+// My Items (seller) — returns all items including sold, excludes only admin-removed
 exports.myItems = async (req, res) => {
     try {
         let sellerId = req.headers._id;
-        let data = await marketplaceModel.find({ seller: sellerId, isRemoved: false }).sort({ createdAt: -1 });
+        // Include sold items (isSold:true) but exclude admin-removed (isRemoved:true AND isSold:false)
+        let data = await marketplaceModel.find({
+            seller: sellerId,
+            $or: [{ isRemoved: false }, { isSold: true }]
+        }).sort({ createdAt: -1 });
         res.status(200).json({ success: true, message: "Your items", data });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+    }
+};
+
+// Mark item as sold (called after buyer completes payment)
+exports.markAsSold = async (req, res) => {
+    try {
+        let { id } = req.params;
+        let { buyerName, buyerPhone, buyerArea, buyerCity, txnRef } = req.body;
+
+        const existing = await marketplaceModel.findById(id);
+        if (!existing) return res.status(404).json({ success: false, message: "Item not found." });
+        if (existing.isSold)  return res.status(400).json({ success: false, message: "Item is already sold." });
+
+        let data = await marketplaceModel.findByIdAndUpdate(
+            id,
+            {
+                isSold:    true,
+                isRemoved: true,
+                soldAt:    new Date(),
+                buyerInfo: { name: buyerName, phone: buyerPhone, area: buyerArea, city: buyerCity, txnRef }
+            },
+            { new: true }
+        );
+        res.status(200).json({ success: true, message: "Item marked as sold.", data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }
@@ -104,6 +141,14 @@ exports.myItems = async (req, res) => {
 exports.updateItem = async (req, res) => {
     try {
         let { id } = req.params;
+        let sellerId = req.headers._id;
+
+        const existing = await marketplaceModel.findById(id);
+        if (!existing) return res.status(404).json({ success: false, message: "Item not found." });
+        if (String(existing.seller) !== String(sellerId)) {
+            return res.status(403).json({ success: false, message: "You can only update your own items." });
+        }
+
         let { title, description, price, condition } = req.body;
 
         let data = await marketplaceModel.findByIdAndUpdate(
@@ -122,7 +167,15 @@ exports.updateItem = async (req, res) => {
 exports.deleteItem = async (req, res) => {
     try {
         let { id } = req.params;
-        let data = await marketplaceModel.findByIdAndDelete(id);
+        let sellerId = req.headers._id;
+
+        const existing = await marketplaceModel.findById(id);
+        if (!existing) return res.status(404).json({ success: false, message: "Item not found." });
+        if (String(existing.seller) !== String(sellerId)) {
+            return res.status(403).json({ success: false, message: "You can only delete your own items." });
+        }
+
+        let data = await marketplaceModel.findByIdAndUpdate(id, { isRemoved: true }, { new: true });
         res.status(200).json({ success: true, message: "Item deleted successfully", data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });

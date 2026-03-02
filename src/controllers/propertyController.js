@@ -5,6 +5,13 @@ const propertyModel  = require("../models/propertyModel");
 exports.createProperty = async (req, res) => {
     try {
         let landlordId = req.headers._id;
+        let role       = req.headers.role;
+
+        // Only landlord can add a property
+        if (role !== "landlord") {
+            return res.status(403).json({ success: false, message: "Only landlords can add properties." });
+        }
+
         let { propertyType, monthlyRent, advanceDeposit, address, area,
               location, distanceFromMainRoad, facilities, availability } = req.body;
 
@@ -41,9 +48,19 @@ exports.createProperty = async (req, res) => {
 // All Properties (public — with search & filters)
 exports.allProperties = async (req, res) => {
     try {
-        let { area, minRent, maxRent, propertyType, pageNo = 1, perPage = 10 } = req.query;
+        let { area, minRent, maxRent, propertyType, availability, pageNo = 1, perPage = 20 } = req.query;
 
         let matchStage = { isRemoved: false };
+
+        const role = req.headers.role;
+        const canViewRented = role === "landlord" || role === "admin";
+
+        // If no availability filter is specified default to Available for public browsing
+        if (availability && canViewRented) {
+            matchStage.availability = availability;
+        } else {
+            matchStage.availability = "Available";
+        }
 
         if (area)         matchStage.area         = { $regex: area, $options: "i" };
         if (propertyType) matchStage.propertyType  = propertyType;
@@ -85,6 +102,20 @@ exports.singleProperty = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid property ID" });
         }
 
+        const role = req.headers.role;
+        const userId = req.headers._id;
+
+        const property = await propertyModel.findById(id).select("landlord availability isRemoved").lean();
+        if (!property || property.isRemoved) {
+            return res.status(404).json({ success: false, message: "Property not found." });
+        }
+
+        const isOwner = userId && String(property.landlord) === String(userId);
+        const canViewRented = role === "landlord" || role === "admin" || isOwner;
+        if (property.availability !== "Available" && !canViewRented) {
+            return res.status(404).json({ success: false, message: "Property not found." });
+        }
+
         let matchStage = { $match: { _id: new mongoose.Types.ObjectId(id) } };
         let joinLandlord = {
             $lookup: { from: "users", localField: "landlord", foreignField: "_id", as: "landlordInfo" }
@@ -115,15 +146,36 @@ exports.myProperties = async (req, res) => {
 exports.updateProperty = async (req, res) => {
     try {
         let { id } = req.params;
+        let landlordId = req.headers._id;
+
+        // Verify ownership
+        const existing = await propertyModel.findById(id);
+        if (!existing) return res.status(404).json({ success: false, message: "Property not found." });
+        if (String(existing.landlord) !== String(landlordId)) {
+            return res.status(403).json({ success: false, message: "You can only update your own properties." });
+        }
+
         let { propertyType, monthlyRent, advanceDeposit, address, area,
               location, distanceFromMainRoad, facilities, availability } = req.body;
 
-        let data = await propertyModel.findByIdAndUpdate(
-            id,
-            { propertyType, monthlyRent, advanceDeposit, address, area,
-              location, distanceFromMainRoad, facilities, availability },
-            { new: true }
-        );
+        // parse facilities if sent as JSON string from FormData
+        let parsedFacilities = facilities;
+        if (typeof facilities === "string") {
+            try { parsedFacilities = JSON.parse(facilities); } catch { parsedFacilities = [facilities]; }
+        }
+
+        let updateData = {
+            propertyType, monthlyRent, advanceDeposit,
+            address, area, location, distanceFromMainRoad,
+            facilities: parsedFacilities, availability
+        };
+
+        // if new images were uploaded, replace existing images
+        if (req.files && req.files.length > 0) {
+            updateData.images = req.files.map(f => f.filename);
+        }
+
+        let data = await propertyModel.findByIdAndUpdate(id, updateData, { new: true });
         res.status(200).json({ success: true, message: "Property updated successfully", data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
@@ -134,7 +186,15 @@ exports.updateProperty = async (req, res) => {
 exports.deleteProperty = async (req, res) => {
     try {
         let { id } = req.params;
-        let data = await propertyModel.findByIdAndDelete(id);
+        let landlordId = req.headers._id;
+
+        const existing = await propertyModel.findById(id);
+        if (!existing) return res.status(404).json({ success: false, message: "Property not found." });
+        if (String(existing.landlord) !== String(landlordId)) {
+            return res.status(403).json({ success: false, message: "You can only delete your own properties." });
+        }
+
+        let data = await propertyModel.findByIdAndUpdate(id, { isRemoved: true }, { new: true });
         res.status(200).json({ success: true, message: "Property deleted successfully", data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
@@ -145,7 +205,14 @@ exports.deleteProperty = async (req, res) => {
 exports.changeAvailability = async (req, res) => {
     try {
         let { id } = req.params;
+        let landlordId = req.headers._id;
         let { availability } = req.body;  // "Available" or "Rented"
+
+        const existing = await propertyModel.findById(id);
+        if (!existing) return res.status(404).json({ success: false, message: "Property not found." });
+        if (String(existing.landlord) !== String(landlordId)) {
+            return res.status(403).json({ success: false, message: "You can only update your own properties." });
+        }
 
         let data = await propertyModel.findByIdAndUpdate(id, { availability }, { new: true });
         res.status(200).json({ success: true, message: "Availability updated", data });
@@ -153,4 +220,3 @@ exports.changeAvailability = async (req, res) => {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }
 };
-

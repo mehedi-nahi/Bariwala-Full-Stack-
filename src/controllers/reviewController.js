@@ -5,7 +5,28 @@ const reviewModel  = require("../models/reviewModel");
 exports.createReview = async (req, res) => {
     try {
         let reviewerId = req.headers._id;
+        let role       = req.headers.role;
         let { revieweeId, propertyId, reviewType, rating, comment } = req.body;
+
+        // Only tenant and landlord can submit reviews
+        if (!["tenant", "landlord"].includes(role)) {
+            return res.status(403).json({ success: false, message: "Only tenant or landlord can submit reviews." });
+        }
+
+        // Validate rating range 1–5
+        if (!rating || Number(rating) < 1 || Number(rating) > 5) {
+            return res.status(400).json({ success: false, message: "Rating must be between 1 and 5." });
+        }
+
+        // Tenant can only submit tenant-to-landlord review
+        if (role === "tenant" && reviewType !== "tenant-to-landlord") {
+            return res.status(403).json({ success: false, message: "Tenants can only rate landlords." });
+        }
+
+        // Landlord can only submit landlord-to-tenant review
+        if (role === "landlord" && reviewType !== "landlord-to-tenant") {
+            return res.status(403).json({ success: false, message: "Landlords can only rate tenants." });
+        }
 
         // prevent duplicate review for same property by same reviewer
         let existing = await reviewModel.findOne({
@@ -81,15 +102,3 @@ exports.userReviews = async (req, res) => {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }
 };
-
-// Delete Review
-exports.deleteReview = async (req, res) => {
-    try {
-        let { id } = req.params;
-        let data = await reviewModel.findByIdAndDelete(id);
-        res.status(200).json({ success: true, message: "Review deleted successfully", data });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
-    }
-};
-

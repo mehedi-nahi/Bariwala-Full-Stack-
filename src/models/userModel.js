@@ -32,6 +32,12 @@ const DataSchema = new mongoose.Schema({
         type: String,
         default: ""
     },
+    bio: {
+        type: String,
+        default: "",
+        trim: true,
+        maxlength: 200
+    },
     isBlocked: {
         type: Boolean,
         default: false

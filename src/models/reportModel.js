@@ -6,10 +6,10 @@ const DataSchema = new mongoose.Schema({
         ref: "users",
         required: true
     },
-    // property | user | marketplace
+    // property = fake listing | marketplace = fake marketplace item | user = bad behavior
     reportType: {
         type: String,
-        enum: ["property", "user", "marketplace"],
+        enum: ["property", "marketplace", "user"],
         required: true
     },
     // the id of the reported entity

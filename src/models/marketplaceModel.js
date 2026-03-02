@@ -32,6 +32,21 @@ const DataSchema = new mongoose.Schema({
     isRemoved: {
         type: Boolean,
         default: false
+    },
+    isSold: {
+        type: Boolean,
+        default: false
+    },
+    soldAt: {
+        type: Date,
+        default: null
+    },
+    buyerInfo: {
+        name:    { type: String, default: "" },
+        phone:   { type: String, default: "" },
+        area:    { type: String, default: "" },
+        city:    { type: String, default: "" },
+        txnRef:  { type: String, default: "" }
     }
 }, {
     versionKey: false,

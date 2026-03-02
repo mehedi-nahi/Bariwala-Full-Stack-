@@ -17,11 +17,8 @@ const Login = ({ setUser }) => {
         try {
             let res = await loginAPI(form);
             setUser(res.data.data);
-            let role = res.data.data.role;
-            if (role === "landlord")    navigate("/landlord/dashboard");
-            else if (role === "tenant") navigate("/tenant/dashboard");
-            else if (role === "marketplace") navigate("/marketplace/dashboard");
-            else if (role === "admin")  navigate("/admin/dashboard");
+            const role = res.data.data.role;
+            navigate(role === "marketplace" ? "/marketplace/items" : "/");
         } catch (err) {
             setError(err.response?.data?.message || "Login failed");
         } finally {

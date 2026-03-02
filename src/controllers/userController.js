@@ -6,6 +6,24 @@ const { EncodeToken } = require("../utility/tokenUtility");
 exports.register = async (req, res) => {
     try {
         let { name, email, phone, password, role } = req.body;
+
+        // landlord, tenant, or marketplace user can self-register
+        const allowedRoles = ["landlord", "tenant", "marketplace"];
+        if (!allowedRoles.includes(role)) {
+            return res.status(400).json({ success: false, message: "Role must be 'landlord', 'tenant', or 'marketplace'." });
+        }
+
+        // Validate email format — must contain @ and a dot
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ success: false, message: "Invalid email address. Must contain @ and a domain (e.g. user@email.com)." });
+        }
+
+        // Validate phone — exactly 11 digits if provided
+        if (phone && !/^[0-9]{11}$/.test(phone)) {
+            return res.status(400).json({ success: false, message: "Phone number must be exactly 11 digits." });
+        }
+
         let result = await userModel.create({ name, email, phone, password, role });
         result.password = undefined;
         res.status(201).json({
@@ -87,12 +105,70 @@ exports.profile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         let userID = req.headers._id;
-        let { name, phone, role, profileImg } = req.body;
+        let { name, phone, role, profileImg, bio } = req.body;
 
-        let updatedData = { name, phone, role, profileImg };
+        // Prevent role escalation — only landlord, tenant, or marketplace are valid choices
+        const allowedRoles = ["landlord", "tenant", "marketplace"];
+        if (role && !allowedRoles.includes(role)) {
+            return res.status(400).json({ success: false, message: "Role must be 'landlord', 'tenant', or 'marketplace'." });
+        }
+
+        // Validate phone — exactly 11 digits if provided
+        if (phone && !/^[0-9]{11}$/.test(phone)) {
+            return res.status(400).json({ success: false, message: "Phone number must be exactly 11 digits." });
+        }
+
+        let updatedData = { name, phone, role, profileImg, bio };
 
         let result = await userModel.findByIdAndUpdate(userID, updatedData, { new: true }).select("-password");
         res.status(200).json({ success: true, message: "Profile updated successfully", data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+    }
+};
+
+// Search Tenants by name or email — used by landlord invoice form
+exports.searchTenants = async (req, res) => {
+    try {
+        let { q } = req.query;
+        if (!q || q.trim().length < 2) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+        const regex = new RegExp(q.trim(), "i");
+        let users = await userModel.find({
+            role: "tenant",
+            isBlocked: false,
+            $or: [{ name: regex }, { email: regex }]
+        }).select("_id name email").limit(10).lean();
+
+        res.status(200).json({ success: true, data: users });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+    }
+};
+
+// Public Profile — safe view of another user (used in inbox, property detail etc.)
+exports.publicProfile = async (req, res) => {
+    try {
+        let { userId } = req.params;
+        if (!require("mongoose").Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ success: false, message: "Invalid user ID." });
+        }
+        let user = await userModel.findById(userId).select("name phone role profileImg bio createdAt").lean();
+        if (!user) return res.status(404).json({ success: false, message: "User not found." });
+        // never expose phone/email to strangers — only name, role, bio, member since
+        res.status(200).json({
+            success: true,
+            message: "Public profile retrieved",
+            data: {
+                _id:         user._id,
+                name:        user.name,
+                role:        user.role,
+                profileImg:  user.profileImg || "",
+                bio:         user.bio || "",
+                memberSince: user.createdAt
+            }
+        });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }

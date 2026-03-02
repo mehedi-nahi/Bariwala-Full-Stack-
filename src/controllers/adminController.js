@@ -39,16 +39,22 @@ exports.blockUser = async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid user ID" });
         }
 
+        // Use findById first to read current isBlocked state, then update with
+        // findByIdAndUpdate to avoid triggering the bcrypt pre-save hook
         let user = await userModel.findById(id);
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
-        user.isBlocked = !user.isBlocked;
-        await user.save();
+        let newBlockedState = !user.isBlocked;
+        let updated = await userModel.findByIdAndUpdate(
+            id,
+            { isBlocked: newBlockedState },
+            { new: true }
+        ).select("-password");
 
-        let msg = user.isBlocked ? "User blocked successfully" : "User unblocked successfully";
-        res.status(200).json({ success: true, message: msg, data: { id: user._id, isBlocked: user.isBlocked } });
+        let msg = newBlockedState ? "User blocked successfully" : "User unblocked successfully";
+        res.status(200).json({ success: true, message: msg, data: { id: updated._id, isBlocked: updated.isBlocked } });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }
@@ -64,6 +70,11 @@ exports.removeListing = async (req, res) => {
         }
 
         let data = await propertyModel.findByIdAndUpdate(id, { isRemoved: true }, { new: true });
+
+        if (!data) {
+            return res.status(404).json({ success: false, message: "Listing not found" });
+        }
+
         res.status(200).json({ success: true, message: "Listing removed successfully", data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
@@ -127,7 +138,17 @@ exports.updateReport = async (req, res) => {
         let { id } = req.params;
         let { status } = req.body;
 
+        // Validate allowed status values
+        if (!["Pending", "Reviewed", "Resolved"].includes(status)) {
+            return res.status(400).json({ success: false, message: "Status must be 'Pending', 'Reviewed', or 'Resolved'." });
+        }
+
         let data = await reportModel.findByIdAndUpdate(id, { status }, { new: true });
+
+        if (!data) {
+            return res.status(404).json({ success: false, message: "Report not found" });
+        }
+
         res.status(200).json({ success: true, message: "Report status updated", data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
