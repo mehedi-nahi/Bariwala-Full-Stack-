@@ -19,7 +19,6 @@ const statusBadge = (s) => {
     const cls = s === "Paid" ? "green" : s === "Overdue" ? "red" : "yellow";
     return <span className={`badge ${cls}`}>{s}</span>;
 };
-
 /* ── Tenant Search Box ─────────────────────────────────────────── */
 const TenantSearchBox = ({ knownTenants, onSelect }) => {
     const [query,        setQuery]        = useState("");
@@ -61,7 +60,6 @@ const TenantSearchBox = ({ knownTenants, onSelect }) => {
             finally   { setSearching(false); }
         }, 350);
     };
-
     const pick = (t) => {
         setQuery(`${t.tenantName} (${t.tenantEmail})`);
         setShowDropdown(false);
