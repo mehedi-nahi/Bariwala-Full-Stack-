@@ -50,10 +50,12 @@ const Navbar = ({ user, setUser }) => {
                     <Link to="/marketplace/inbox">Inbox</Link>
                 </>}
                 {user?.role === "admin" && <>
-                    <Link to="/">Home</Link>
+                    <Link to="/">Rentals</Link>
+                    <Link to="/marketplace/items">Marketplace</Link>
                     <Link to="/admin/users">Users</Link>
                     <Link to="/admin/reports">Reports</Link>
                     <Link to="/admin/transactions">Transactions</Link>
+                    <Link to="/admin/inbox">Inbox</Link>
                 </>}
                 {user && <>
                     <Link to="/profile">Profile</Link>

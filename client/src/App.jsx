@@ -66,11 +66,6 @@ const App = () => {
                 {/* Shared */}
                 <Route path="/profile" element={<PrivateRoute user={user}><Profile /></PrivateRoute>} />
 
-                {/* Dashboard routes → redirect to profile */}
-                <Route path="/landlord/dashboard"    element={<Navigate to="/profile" replace />} />
-                <Route path="/tenant/dashboard"      element={<Navigate to="/profile" replace />} />
-                <Route path="/marketplace/dashboard" element={<Navigate to="/marketplace/items" replace />} />
-                <Route path="/admin/dashboard"       element={<Navigate to="/profile" replace />} />
 
                 {/* Landlord */}
                 <Route path="/landlord/properties"        element={<PrivateRoute user={user} role="landlord"><MyProperties /></PrivateRoute>} />
@@ -93,6 +88,7 @@ const App = () => {
                 <Route path="/admin/users"        element={<PrivateRoute user={user} role="admin"><AdminUsers /></PrivateRoute>} />
                 <Route path="/admin/reports"      element={<PrivateRoute user={user} role="admin"><AdminReports /></PrivateRoute>} />
                 <Route path="/admin/transactions" element={<PrivateRoute user={user} role="admin"><AdminTransactions /></PrivateRoute>} />
+                <Route path="/admin/inbox"        element={<PrivateRoute user={user} role="admin"><Inbox user={user} /></PrivateRoute>} />
 
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/" />} />

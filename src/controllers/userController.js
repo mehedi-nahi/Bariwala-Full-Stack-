@@ -105,22 +105,19 @@ exports.profile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         let userID = req.headers._id;
-        let { name, phone, role, profileImg, bio } = req.body;
-
-        // Prevent role escalation — only landlord, tenant, or marketplace are valid choices
-        const allowedRoles = ["landlord", "tenant", "marketplace"];
-        if (role && !allowedRoles.includes(role)) {
-            return res.status(400).json({ success: false, message: "Role must be 'landlord', 'tenant', or 'marketplace'." });
-        }
+        let { name, phone, bio } = req.body;
 
         // Validate phone — exactly 11 digits if provided
         if (phone && !/^[0-9]{11}$/.test(phone)) {
             return res.status(400).json({ success: false, message: "Phone number must be exactly 11 digits." });
         }
 
-        let updatedData = { name, phone, role, profileImg, bio };
+        let result = await userModel.findByIdAndUpdate(
+            userID,
+            { name, phone, bio },
+            { new: true }
+        ).select("-password");
 
-        let result = await userModel.findByIdAndUpdate(userID, updatedData, { new: true }).select("-password");
         res.status(200).json({ success: true, message: "Profile updated successfully", data: result });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
@@ -174,14 +171,11 @@ exports.publicProfile = async (req, res) => {
     }
 };
 
-// File Upload
+// File Upload — kept for future use via /file-upload route
 exports.uploadFile = async (req, res) => {
     try {
-        res.status(200).json({
-            success: true,
-            message: "File uploaded successfully",
-            data: req.file
-        });
+        if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded." });
+        res.status(200).json({ success: true, message: "File uploaded successfully", filename: req.file.filename });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }

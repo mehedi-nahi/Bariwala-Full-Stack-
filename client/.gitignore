@@ -1,24 +1,7 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# client/.gitignore
+# Minimal — root .gitignore already covers node_modules, dist, IDE, OS, logs.
+# This file exists because Vite scaffolding creates it per sub-project,
+# which is standard practice for monorepo / nested package setups.
 
-node_modules
-dist
-dist-ssr
+# Vite local env overrides (not needed at root level)
 *.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?

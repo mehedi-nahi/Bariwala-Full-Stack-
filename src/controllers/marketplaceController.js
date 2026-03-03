@@ -1,7 +1,7 @@
 const mongoose          = require("mongoose");
 const marketplaceModel  = require("../models/marketplaceModel");
 
-// Create Item (tenant or landlord can post)
+// Create Item — marketplace users only
 exports.createItem = async (req, res) => {
     try {
         let sellerId   = req.headers._id;
@@ -100,7 +100,6 @@ exports.singleItem = async (req, res) => {
 exports.myItems = async (req, res) => {
     try {
         let sellerId = req.headers._id;
-        // Include sold items (isSold:true) but exclude admin-removed (isRemoved:true AND isSold:false)
         let data = await marketplaceModel.find({
             seller: sellerId,
             $or: [{ isRemoved: false }, { isSold: true }]

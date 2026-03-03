@@ -7,4 +7,3 @@ const PrivateRoute = ({ children, user, role }) => {
 };
 
 export default PrivateRoute;
-

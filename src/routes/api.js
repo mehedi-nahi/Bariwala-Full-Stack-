@@ -45,6 +45,7 @@ router.get("/my-properties",             authVerification,    propertyController
 //  MESSAGING
 // ─────────────────────────────────────────────
 router.post("/send-message",              authVerification, messageController.sendMessage);
+router.post("/broadcast-message",         authVerification, adminVerification, messageController.broadcastMessage);
 router.get("/conversation/:propertyId/:otherUserId",  authVerification, messageController.getConversation);
 router.get("/item-conversation/:itemId/:otherUserId", authVerification, messageController.getItemConversation);
 router.get("/inbox",                      authVerification, messageController.inbox);
@@ -105,5 +106,7 @@ router.delete("/admin/remove-item/:id",    authVerification, adminVerification, 
 router.get("/admin/all-reports",       authVerification, adminVerification, adminController.allReports);
 router.post("/admin/update-report/:id",authVerification, adminVerification, adminController.updateReport);
 router.get("/admin/all-transactions",  authVerification, adminVerification, adminController.allTransactions);
+router.get("/admin/marketplace-items", authVerification, adminVerification, adminController.allMarketplaceItems);
+router.get("/admin/marketplace-users", authVerification, adminVerification, adminController.allMarketplaceUsers);
 
 module.exports = router;

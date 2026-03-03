@@ -646,31 +646,15 @@ const AllItems = () => {
 
             {/* ══ TOP NAV BAR ══ */}
             <div style={{background:"#1a1a2e",borderBottom:"2px solid #e94560",padding:"0 2rem",
-                display:"flex",justifyContent:"space-between",alignItems:"center",height:46,
+                display:"flex",justifyContent:"flex-end",alignItems:"center",height:46,
                 position:"sticky",top:0,zIndex:200,boxShadow:"0 2px 12px rgba(0,0,0,0.3)"}}>
-                <div style={{display:"flex",gap:0,alignItems:"center",height:"100%"}}>
-                    <span style={{fontSize:"0.72rem",fontWeight:800,color:"#e94560",letterSpacing:"0.12em",textTransform:"uppercase",marginRight:"1.5rem"}}>NexMart</span>
-                    {CATEGORIES.slice(0,6).map(c=>(
-                        <button key={c.val} onClick={()=>setCategory(c.val)}
-                            style={{background:"none",border:"none",color:category===c.val?"#fff":"rgba(255,255,255,0.42)",
-                                cursor:"pointer",fontSize:"0.78rem",fontWeight:600,padding:"0 0.8rem",height:"100%",
-                                borderBottom:category===c.val?"2px solid #e94560":"2px solid transparent",
-                                letterSpacing:"0.01em",transition:"color 0.15s",whiteSpace:"nowrap"}}>
-                            {c.icon} {c.label}
-                        </button>
-                    ))}
-                </div>
-                <div style={{display:"flex",gap:"0.75rem",alignItems:"center",flexShrink:0}}>
-                    <Link to="/" style={{color:"rgba(255,255,255,0.42)",fontSize:"0.77rem",textDecoration:"none"}}>🏠 Rentals</Link>
-                    <Link to="/marketplace/add-item" style={{color:"rgba(255,255,255,0.42)",fontSize:"0.77rem",textDecoration:"none"}}>+ Sell</Link>
-                    <button onClick={()=>setShowCart(true)}
-                        style={{background:"#e94560",color:"#fff",border:"none",padding:"0.4rem 1rem",cursor:"pointer",
-                            fontWeight:700,fontSize:"0.79rem",borderRadius:7,display:"flex",alignItems:"center",gap:"0.45rem"}}>
-                        🛒 Cart
-                        {cart.length>0&&<span style={{background:"#fff",color:"#e94560",borderRadius:"50%",width:17,height:17,
-                            display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.58rem",fontWeight:800}}>{cart.length}</span>}
-                    </button>
-                </div>
+                <button onClick={()=>setShowCart(true)}
+                    style={{background:"#e94560",color:"#fff",border:"none",padding:"0.4rem 1rem",cursor:"pointer",
+                        fontWeight:700,fontSize:"0.79rem",borderRadius:7,display:"flex",alignItems:"center",gap:"0.45rem"}}>
+                    🛒 Cart
+                    {cart.length>0&&<span style={{background:"#fff",color:"#e94560",borderRadius:"50%",width:17,height:17,
+                        display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.58rem",fontWeight:800}}>{cart.length}</span>}
+                </button>
             </div>
 
             {/* ORDER SUCCESS */}

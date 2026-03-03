@@ -2,8 +2,8 @@ const mongoose          = require("mongoose");
 const userModel         = require("../models/userModel");
 const propertyModel     = require("../models/propertyModel");
 const marketplaceModel  = require("../models/marketplaceModel");
-const reportModel       = require("../models/reportModel");
 const paymentModel      = require("../models/paymentModel");
+const reportModel       = require("../models/reportModel");
 
 // View All Users
 exports.allUsers = async (req, res) => {
@@ -13,7 +13,10 @@ exports.allUsers = async (req, res) => {
 
         let faceStage = {
             $facet: {
-                totalCount: [{ $count: "count" }],
+                totalCount:    [{ $count: "count" }],
+                landlordCount: [{ $match: { role: "landlord" } }, { $count: "count" }],
+                tenantCount:   [{ $match: { role: "tenant"   } }, { $count: "count" }],
+                blockedCount:  [{ $match: { isBlocked: true  } }, { $count: "count" }],
                 users: [
                     { $sort:    { createdAt: -1 } },
                     { $skip:    skipRow },
@@ -196,3 +199,60 @@ exports.allTransactions = async (req, res) => {
     }
 };
 
+// All Marketplace Items (admin read-only view)
+exports.allMarketplaceItems = async (req, res) => {
+    try {
+        let { pageNo = 1, perPage = 20, status } = req.query;
+        let skipRow = (Number(pageNo) - 1) * Number(perPage);
+        let matchStage = {};
+        if (status === "active")   matchStage = { isRemoved: false, isSold: false };
+        else if (status === "sold") matchStage = { isSold: true };
+        else if (status === "removed") matchStage = { isRemoved: true, isSold: false };
+
+        let faceStage = {
+            $facet: {
+                totalCount: [{ $count: "count" }],
+                activeCount:   [{ $match: { isRemoved: false, isSold: false } }, { $count: "count" }],
+                soldCount:     [{ $match: { isSold: true } },                    { $count: "count" }],
+                removedCount:  [{ $match: { isRemoved: true, isSold: false } },  { $count: "count" }],
+                items: [
+                    { $sort: { createdAt: -1 } },
+                    { $skip: skipRow },
+                    { $limit: Number(perPage) },
+                    { $lookup: { from: "users", localField: "seller", foreignField: "_id", as: "sellerInfo" } },
+                    { $project: { "sellerInfo.password": 0 } }
+                ]
+            }
+        };
+
+        let result = await marketplaceModel.aggregate([{ $match: matchStage }, faceStage]);
+        res.status(200).json({ success: true, message: "All marketplace items", data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+    }
+};
+
+// All Marketplace Users (admin view)
+exports.allMarketplaceUsers = async (req, res) => {
+    try {
+        let { pageNo = 1, perPage = 20 } = req.query;
+        let skipRow = (Number(pageNo) - 1) * Number(perPage);
+
+        let faceStage = {
+            $facet: {
+                totalCount: [{ $count: "count" }],
+                users: [
+                    { $sort:    { createdAt: -1 } },
+                    { $skip:    skipRow },
+                    { $limit:   Number(perPage) },
+                    { $project: { password: 0 } }
+                ]
+            }
+        };
+
+        let result = await userModel.aggregate([{ $match: { role: "marketplace" } }, faceStage]);
+        res.status(200).json({ success: true, message: "All marketplace users", data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+    }
+};

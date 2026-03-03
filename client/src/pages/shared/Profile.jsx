@@ -4,7 +4,8 @@ import { profileAPI, updateProfileAPI } from "../../api/userAPI";
 import { myPropertiesAPI } from "../../api/propertyAPI";
 import { paymentHistoryAPI } from "../../api/paymentAPI";
 import { myItemsAPI } from "../../api/marketplaceAPI";
-import { adminAllUsersAPI, adminAllReportsAPI, adminAllTransactionsAPI } from "../../api/adminAPI";
+import { adminAllUsersAPI, adminAllReportsAPI, adminAllTransactionsAPI, adminMarketplaceItemsAPI, adminMarketplaceUsersAPI } from "../../api/adminAPI";
+import { broadcastMessageAPI } from "../../api/messageAPI";
 
 const ROLE_COLOR = { landlord:"#1a1a2e", tenant:"#2980b9", marketplace:"#27ae60", admin:"#e74c3c" };
 const ROLE_LABEL = { landlord:"Landlord", tenant:"Tenant", marketplace:"Marketplace User", admin:"Admin" };
@@ -239,93 +240,298 @@ const MarketplaceSection = () => {
 
 /* ══ ADMIN SECTION ══ */
 const AdminSection = () => {
+    const [activePanel,  setActivePanel]  = useState("rental"); // "rental" | "marketplace"
+    // ── Rental data ──
     const [users,        setUsers]        = useState([]);
     const [reports,      setReports]      = useState([]);
     const [transactions, setTransactions] = useState([]);
+    // ── Marketplace data ──
+    const [mktUsers,     setMktUsers]     = useState([]);
+    const [mktReports,   setMktReports]   = useState([]);
+    const [mktItems,     setMktItems]     = useState([]);
+    // ── Broadcast ──
+    const [bcMsg,        setBcMsg]        = useState("");
+    const [bcRole,       setBcRole]       = useState("");
+    const [bcStatus,     setBcStatus]     = useState("");
+    const [bcLoading,    setBcLoading]    = useState(false);
+
     useEffect(() => {
         adminAllUsersAPI().then(r=>setUsers(r.data.data||[]));
         adminAllReportsAPI().then(r=>setReports(r.data.data||[]));
         adminAllTransactionsAPI().then(r=>setTransactions(r.data.data||[]));
+        adminMarketplaceUsersAPI().then(r=>setMktUsers(r.data.data||[]));
+        adminAllReportsAPI({ status:"" }).then(r=>setMktReports(r.data.data||[]));
+        adminMarketplaceItemsAPI().then(r=>setMktItems(r.data.data||[]));
     }, []);
-    const totalUsers     = users[0]?.totalCount?.[0]?.count||0;
-    const totalTxn       = transactions[0]?.totalCount?.[0]?.count||0;
-    const userList       = users[0]?.users||[];
-    const pendingReports = (reports[0]?.reports||[]).filter(r=>r.status==="Pending").length;
+
+    // ── Rental stats ──
+    const facet          = users[0] || {};
+    const totalUsers     = facet.totalCount?.[0]?.count    || 0;
+    const totalTxn       = transactions[0]?.totalCount?.[0]?.count || 0;
+    const userList       = facet.users || [];
+    const rentalReports  = reports[0]?.reports || [];
+    const pendingRental  = rentalReports.filter(r=>r.status==="Pending").length;
     const revenue        = (transactions[0]?.transactions||[]).filter(t=>t.status==="Paid").reduce((s,t)=>s+(t.amount||0),0);
     const recentUsers    = userList.slice(0,5);
     const recentTxn      = (transactions[0]?.transactions||[]).slice(0,5);
+
+    // ── Marketplace stats ──
+    const mktFacet       = mktUsers[0] || {};
+    const totalMktUsers  = mktFacet.totalCount?.[0]?.count || 0;
+    const mktItemFacet   = mktItems[0] || {};
+    const totalMktItems  = mktItemFacet.totalCount?.[0]?.count  || 0;
+    const activeMktItems = mktItemFacet.activeCount?.[0]?.count || 0;
+    const soldMktItems   = mktItemFacet.soldCount?.[0]?.count   || 0;
+    const allMktReports  = mktReports[0]?.reports || [];
+    const pendingMkt     = allMktReports.filter(r=>r.status==="Pending"&&r.reportType==="marketplace").length;
+    const recentMktUsers = (mktFacet.users||[]).slice(0,5);
+    const recentMktItems = (mktItemFacet.items||[]).slice(0,4);
+
+    const handleBroadcast = async (e) => {
+        e.preventDefault();
+        if (!bcMsg.trim()) return;
+        setBcLoading(true); setBcStatus("");
+        try {
+            const res = await broadcastMessageAPI({ message: bcMsg.trim(), targetRole: bcRole||undefined });
+            setBcStatus(`✅ Sent to ${res.data.count} user(s) successfully.`);
+            setBcMsg(""); setBcRole("");
+        } catch(err) {
+            setBcStatus("❌ " + (err.response?.data?.message || "Failed to send."));
+        } finally { setBcLoading(false); }
+    };
+
+    /* ── Tab button ── */
+    const Tab = ({ id, icon, label, alert }) => (
+        <button onClick={()=>setActivePanel(id)}
+            style={{display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.65rem 1.3rem",border:"none",borderBottom:`3px solid ${activePanel===id?"#e94560":"transparent"}`,background:"transparent",color:activePanel===id?"#e94560":"#888",fontWeight:700,fontSize:"0.84rem",cursor:"pointer",transition:"all 0.15s",position:"relative"}}>
+            <SVGIcon d={ICONS[icon]} size={15}/>
+            {label}
+            {alert>0 && <span style={{position:"absolute",top:4,right:4,background:"#e94560",color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:"0.6rem",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800}}>{alert}</span>}
+        </button>
+    );
+
     return (
         <div>
-            {pendingReports>0 && <div style={{background:"#fdecea",border:"1px solid #e74c3c",borderRadius:10,padding:"0.75rem 1rem",marginBottom:"1rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{color:"#c0392b",fontWeight:600,fontSize:"0.85rem"}}>{pendingReports} report{pendingReports>1?"s":""} need review!</span>
-                <Link to="/admin/reports" style={{background:"#e74c3c",color:"#fff",padding:"0.3rem 0.8rem",borderRadius:6,fontSize:"0.76rem",textDecoration:"none",fontWeight:700}}>Review</Link>
-            </div>}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:"0.75rem"}}>
-                {[
-                    {iconKey:"users", label:"Total Users",    value:totalUsers,                     bg:"#fff0f2",color:"#e94560"},
-                    {iconKey:"home",  label:"Landlords",      value:userList.filter(u=>u.role==="landlord").length, bg:"#f0f2ff",color:"#2980b9"},
-                    {iconKey:"key",   label:"Tenants",        value:userList.filter(u=>u.role==="tenant").length,   bg:"#f0faf4",color:"#27ae60"},
-                    {iconKey:"close", label:"Blocked",        value:userList.filter(u=>u.isBlocked).length,         bg:"#fdecea",color:"#e74c3c"},
-                    {iconKey:"report",label:"Reports",        value:pendingReports,                  bg:"#fff3cd",color:"#856404"},
-                    {iconKey:"card",  label:"Transactions",   value:totalTxn,                        bg:"#f5f0ff",color:"#8e44ad"},
-                    {iconKey:"money", label:"Revenue",        value:"৳"+revenue.toLocaleString(),    bg:"#f0faf4",color:"#1a6e3c"},
-                ].map(s=><StatCard key={s.label} {...s}/>)}
+            {/* ── Panel tabs ── */}
+            <div style={{display:"flex",borderBottom:"2px solid #f0f0f0",marginBottom:"1.4rem",gap:"0.25rem"}}>
+                <Tab id="rental"      icon="home"   label="🏠 Rental Service"  alert={pendingRental}/>
+                <Tab id="marketplace" icon="bag"    label="🛒 Marketplace"     alert={pendingMkt}/>
+                <Tab id="broadcast"   icon="inbox"  label="📢 Broadcast"       alert={0}/>
             </div>
-            <SH title="Quick Actions"/>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"0.75rem"}}>
-                {[
-                    {iconKey:"users", label:"Manage Users",  desc:"View, block or remove",  to:"/admin/users"},
-                    {iconKey:"report",label:"Reports",       desc:"Review flagged content",  to:"/admin/reports"},
-                    {iconKey:"card",  label:"Transactions",  desc:"View all payments",       to:"/admin/transactions"},
-                    {iconKey:"home",  label:"Properties",    desc:"Browse all listings",     to:"/"},
-                ].map(a=><ActionCard key={a.label} {...a}/>)}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem",marginTop:"1.4rem"}}>
+
+            {/* ══════════════════════════════════
+                RENTAL PANEL
+            ══════════════════════════════════ */}
+            {activePanel === "rental" && (
                 <div>
-                    <SH title="Recent Users" to="/admin/users"/>
-                    <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
-                        {recentUsers.length===0 ? <p style={{padding:"1rem",color:"#aaa",fontSize:"0.83rem"}}>No users yet</p>
-                        : recentUsers.map(u=>(
-                            <div key={u._id} style={{display:"flex",alignItems:"center",gap:"0.7rem",padding:"0.6rem 0.9rem",borderBottom:"1px solid #f5f5f5"}}>
-                                <div style={{width:30,height:30,borderRadius:"50%",background:"#e94560",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.75rem",flexShrink:0}}>{u.name?.[0]?.toUpperCase()}</div>
-                                <div style={{flex:1,minWidth:0}}>
-                                    <div style={{fontWeight:600,fontSize:"0.8rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name}</div>
-                                    <div style={{fontSize:"0.7rem",color:"#aaa",textTransform:"capitalize"}}>{u.role}</div>
-                                </div>
-                                {u.isBlocked && <span style={{background:"#fdecea",color:"#e74c3c",fontSize:"0.63rem",fontWeight:700,padding:"0.12rem 0.45rem",borderRadius:20}}>Blocked</span>}
+                    {pendingRental>0 && (
+                        <div style={{background:"#fdecea",border:"1px solid #e74c3c",borderRadius:10,padding:"0.75rem 1rem",marginBottom:"1rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <span style={{color:"#c0392b",fontWeight:600,fontSize:"0.85rem"}}>{pendingRental} rental report{pendingRental>1?"s":""} need review!</span>
+                            <Link to="/admin/reports" style={{background:"#e74c3c",color:"#fff",padding:"0.3rem 0.8rem",borderRadius:6,fontSize:"0.76rem",textDecoration:"none",fontWeight:700}}>Review</Link>
+                        </div>
+                    )}
+
+                    {/* Rental stats */}
+                    <div style={{fontSize:"0.7rem",fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.5rem"}}>Rental Platform Stats</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:"0.75rem",marginBottom:"1.2rem"}}>
+                        {[
+                            {iconKey:"users", label:"Total Users",    value:totalUsers,                             bg:"#fff0f2",color:"#e94560"},
+                            {iconKey:"home",  label:"Landlords",      value:facet.landlordCount?.[0]?.count||0,     bg:"#f0f2ff",color:"#2980b9"},
+                            {iconKey:"key",   label:"Tenants",        value:facet.tenantCount?.[0]?.count||0,       bg:"#f0faf4",color:"#27ae60"},
+                            {iconKey:"close", label:"Blocked Users",  value:facet.blockedCount?.[0]?.count||0,      bg:"#fdecea",color:"#e74c3c"},
+                            {iconKey:"report",label:"Pending Reports",value:pendingRental,                          bg:"#fff3cd",color:"#856404"},
+                            {iconKey:"card",  label:"Transactions",   value:totalTxn,                              bg:"#f5f0ff",color:"#8e44ad"},
+                            {iconKey:"money", label:"Rental Revenue", value:"৳"+revenue.toLocaleString(),          bg:"#f0faf4",color:"#1a6e3c"},
+                        ].map(s=><StatCard key={s.label} {...s}/>)}
+                    </div>
+
+                    {/* Rental actions */}
+                    <SH title="Rental Panel Actions"/>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"0.75rem",marginBottom:"1.4rem"}}>
+                        {[
+                            {iconKey:"users", label:"Manage Users",    desc:"View, block or remove",     to:"/admin/users"},
+                            {iconKey:"report",label:"Reports",         desc:"Review flagged properties",  to:"/admin/reports"},
+                            {iconKey:"card",  label:"Transactions",    desc:"All rental payments",        to:"/admin/transactions"},
+                            {iconKey:"inbox", label:"Inbox",           desc:"All messages",               to:"/admin/inbox"},
+                            {iconKey:"home",  label:"Browse Rentals",  desc:"All property listings",      to:"/"},
+                        ].map(a=><ActionCard key={a.label} {...a}/>)}
+                    </div>
+
+                    {/* Recent Users + Recent Transactions */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                        <div>
+                            <SH title="Recent Rental Users" to="/admin/users"/>
+                            <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
+                                {recentUsers.length===0
+                                    ? <p style={{padding:"1rem",color:"#aaa",fontSize:"0.83rem"}}>No users yet</p>
+                                    : recentUsers.map(u=>(
+                                        <div key={u._id} style={{display:"flex",alignItems:"center",gap:"0.7rem",padding:"0.6rem 0.9rem",borderBottom:"1px solid #f5f5f5"}}>
+                                            <div style={{width:30,height:30,borderRadius:"50%",background:"#e94560",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.75rem",flexShrink:0}}>{u.name?.[0]?.toUpperCase()}</div>
+                                            <div style={{flex:1,minWidth:0}}>
+                                                <div style={{fontWeight:600,fontSize:"0.8rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name}</div>
+                                                <div style={{fontSize:"0.7rem",color:"#aaa",textTransform:"capitalize"}}>{u.role}</div>
+                                            </div>
+                                            {u.isBlocked && <span style={{background:"#fdecea",color:"#e74c3c",fontSize:"0.63rem",fontWeight:700,padding:"0.12rem 0.45rem",borderRadius:20}}>Blocked</span>}
+                                        </div>
+                                    ))}
                             </div>
-                        ))}
+                        </div>
+                        <div>
+                            <SH title="Recent Transactions" to="/admin/transactions"/>
+                            <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
+                                {recentTxn.length===0
+                                    ? <p style={{padding:"1rem",color:"#aaa",fontSize:"0.83rem"}}>No transactions yet</p>
+                                    : recentTxn.map(t=>(
+                                        <div key={t._id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.6rem 0.9rem",borderBottom:"1px solid #f5f5f5"}}>
+                                            <div>
+                                                <div style={{fontWeight:600,fontSize:"0.78rem"}}>{t.invoiceNo}</div>
+                                                <div style={{fontSize:"0.7rem",color:"#aaa"}}>{t.forMonth}</div>
+                                            </div>
+                                            <div style={{textAlign:"right"}}>
+                                                <div style={{fontWeight:700,color:"#e94560",fontSize:"0.8rem"}}>৳{t.amount?.toLocaleString()}</div>
+                                                <span style={{fontSize:"0.62rem",fontWeight:700,padding:"0.12rem 0.45rem",borderRadius:20,background:t.status==="Paid"?"#f0faf4":"#fff3cd",color:t.status==="Paid"?"#27ae60":"#856404"}}>{t.status}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
+            )}
+
+            {/* ══════════════════════════════════
+                MARKETPLACE PANEL
+            ══════════════════════════════════ */}
+            {activePanel === "marketplace" && (
                 <div>
-                    <SH title="Recent Transactions" to="/admin/transactions"/>
-                    <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
-                        {recentTxn.length===0 ? <p style={{padding:"1rem",color:"#aaa",fontSize:"0.83rem"}}>No transactions yet</p>
-                        : recentTxn.map(t=>(
-                            <div key={t._id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.6rem 0.9rem",borderBottom:"1px solid #f5f5f5"}}>
-                                <div>
-                                    <div style={{fontWeight:600,fontSize:"0.78rem"}}>{t.invoiceNo}</div>
-                                    <div style={{fontSize:"0.7rem",color:"#aaa"}}>{t.forMonth}</div>
-                                </div>
-                                <div style={{textAlign:"right"}}>
-                                    <div style={{fontWeight:700,color:"#e94560",fontSize:"0.8rem"}}>৳{t.amount?.toLocaleString()}</div>
-                                    <span style={{fontSize:"0.62rem",fontWeight:700,padding:"0.12rem 0.45rem",borderRadius:20,background:t.status==="Paid"?"#f0faf4":"#fff3cd",color:t.status==="Paid"?"#27ae60":"#856404"}}>{t.status}</span>
-                                </div>
+                    {pendingMkt>0 && (
+                        <div style={{background:"#fff7f0",border:"1px solid #f39c12",borderRadius:10,padding:"0.75rem 1rem",marginBottom:"1rem",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <span style={{color:"#8a4f00",fontWeight:600,fontSize:"0.85rem"}}>{pendingMkt} marketplace report{pendingMkt>1?"s":""} need review!</span>
+                            <Link to="/admin/reports" style={{background:"#f39c12",color:"#fff",padding:"0.3rem 0.8rem",borderRadius:6,fontSize:"0.76rem",textDecoration:"none",fontWeight:700}}>Review</Link>
+                        </div>
+                    )}
+
+                    {/* Marketplace stats */}
+                    <div style={{fontSize:"0.7rem",fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"0.5rem"}}>Marketplace Platform Stats</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:"0.75rem",marginBottom:"1.2rem"}}>
+                        {[
+                            {iconKey:"users", label:"Mkt Sellers",    value:totalMktUsers,    bg:"#fff0f2",color:"#e94560"},
+                            {iconKey:"bag",   label:"Total Items",    value:totalMktItems,    bg:"#fff7f0",color:"#f39c12"},
+                            {iconKey:"check", label:"Active Items",   value:activeMktItems,   bg:"#f0faf4",color:"#27ae60"},
+                            {iconKey:"card",  label:"Sold Items",     value:soldMktItems,     bg:"#f0f2ff",color:"#2980b9"},
+                            {iconKey:"report",label:"Mkt Reports",    value:pendingMkt,       bg:"#fff3cd",color:"#856404"},
+                            {iconKey:"close", label:"Removed",        value:mktItemFacet.removedCount?.[0]?.count||0, bg:"#fdecea",color:"#e74c3c"},
+                        ].map(s=><StatCard key={s.label} {...s}/>)}
+                    </div>
+
+                    {/* Marketplace actions */}
+                    <SH title="Marketplace Panel Actions"/>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"0.75rem",marginBottom:"1.4rem"}}>
+                        {[
+                            {iconKey:"report",label:"Mkt Reports",    desc:"Review flagged items/users",   to:"/admin/reports"},
+                            {iconKey:"inbox", label:"Inbox",          desc:"Messages to sellers/buyers",   to:"/admin/inbox"},
+                            {iconKey:"bag",   label:"Browse Market",  desc:"All marketplace listings",     to:"/marketplace/items"},
+                        ].map(a=><ActionCard key={a.label} {...a}/>)}
+                    </div>
+
+                    {/* Recent Marketplace Users + Recent Items side by side */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                        <div>
+                            <SH title="Recent Marketplace Sellers"/>
+                            <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
+                                {recentMktUsers.length===0
+                                    ? <p style={{padding:"1rem",color:"#aaa",fontSize:"0.83rem"}}>No marketplace users yet</p>
+                                    : recentMktUsers.map(u=>(
+                                        <div key={u._id} style={{display:"flex",alignItems:"center",gap:"0.7rem",padding:"0.6rem 0.9rem",borderBottom:"1px solid #f5f5f5"}}>
+                                            <div style={{width:30,height:30,borderRadius:"50%",background:"#27ae60",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:"0.75rem",flexShrink:0}}>{u.name?.[0]?.toUpperCase()}</div>
+                                            <div style={{flex:1,minWidth:0}}>
+                                                <div style={{fontWeight:600,fontSize:"0.8rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.name}</div>
+                                                <div style={{fontSize:"0.7rem",color:"#aaa"}}>{u.email}</div>
+                                            </div>
+                                            {u.isBlocked && <span style={{background:"#fdecea",color:"#e74c3c",fontSize:"0.63rem",fontWeight:700,padding:"0.12rem 0.45rem",borderRadius:20}}>Blocked</span>}
+                                        </div>
+                                    ))}
                             </div>
-                        ))}
+                        </div>
+                        <div>
+                            <SH title="Recent Marketplace Items" to="/marketplace/items"/>
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem"}}>
+                                {recentMktItems.length===0
+                                    ? <p style={{color:"#aaa",fontSize:"0.83rem",gridColumn:"span 2"}}>No items yet</p>
+                                    : recentMktItems.map(item=>(
+                                        <div key={item._id} style={{background:"#fff",borderRadius:10,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
+                                            {item.images?.[0]
+                                                ? <img src={`/api/v1/get-file/${item.images[0]}`} alt="" style={{width:"100%",height:65,objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>
+                                                : <div style={{height:65,background:"#f5f6fa",display:"flex",alignItems:"center",justifyContent:"center",color:"#ccc"}}><SVGIcon d={ICONS.bag} size={22}/></div>}
+                                            <div style={{padding:"0.45rem 0.6rem"}}>
+                                                <div style={{fontWeight:700,fontSize:"0.75rem",color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                                                <div style={{fontWeight:800,fontSize:"0.78rem",color:"#e94560"}}>৳{item.price?.toLocaleString()}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
+
+            {/* ══════════════════════════════════
+                BROADCAST PANEL
+            ══════════════════════════════════ */}
+            {activePanel === "broadcast" && (
+                <div>
+                    <div style={{background:"#fff",borderRadius:14,boxShadow:"0 2px 10px rgba(0,0,0,0.07)",padding:"1.4rem",border:"1px solid #f0f0f0",maxWidth:560}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"1.1rem",paddingBottom:"0.8rem",borderBottom:"1px solid #f5f5f5"}}>
+                            <div style={{width:38,height:38,borderRadius:10,background:"#fff0f2",color:"#e94560",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <SVGIcon d={ICONS.inbox} size={18}/>
+                            </div>
+                            <div>
+                                <div style={{fontWeight:800,fontSize:"0.95rem",color:"#1a1a2e"}}>Broadcast Message</div>
+                                <div style={{fontSize:"0.73rem",color:"#aaa"}}>Send a message to all users or a specific role group</div>
+                            </div>
+                        </div>
+                        <form onSubmit={handleBroadcast} style={{display:"flex",flexDirection:"column",gap:"0.9rem"}}>
+                            <div>
+                                <label style={{display:"block",fontSize:"0.7rem",fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.3rem"}}>Target Audience</label>
+                                <select value={bcRole} onChange={e=>setBcRole(e.target.value)}
+                                    style={{width:"100%",padding:"0.55rem 0.85rem",border:"1px solid #e8e8e8",borderRadius:9,fontSize:"0.86rem",background:"#fafafa",outline:"none",boxSizing:"border-box"}}>
+                                    <option value="">Everyone (all users)</option>
+                                    <option value="tenant">Tenants only</option>
+                                    <option value="landlord">Landlords only</option>
+                                    <option value="marketplace">Marketplace sellers only</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={{display:"block",fontSize:"0.7rem",fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.3rem"}}>Message <span style={{color:"#aaa",textTransform:"none",fontWeight:400}}>(max 500 chars)</span></label>
+                                <textarea value={bcMsg} onChange={e=>setBcMsg(e.target.value)} maxLength={500}
+                                    placeholder="Type your announcement here…"
+                                    style={{width:"100%",padding:"0.65rem 0.9rem",border:"1px solid #e8e8e8",borderRadius:9,fontSize:"0.86rem",background:"#fafafa",outline:"none",resize:"vertical",minHeight:100,boxSizing:"border-box"}}/>
+                                <div style={{textAlign:"right",fontSize:"0.7rem",color:"#aaa",marginTop:2}}>{bcMsg.length}/500</div>
+                            </div>
+                            {bcStatus && (
+                                <div style={{background:bcStatus.startsWith("✅")?"#f0faf4":"#fdecea",border:`1px solid ${bcStatus.startsWith("✅")?"#a9dfcd":"#f5c6c6"}`,color:bcStatus.startsWith("✅")?"#1a6e3c":"#c0392b",borderRadius:8,padding:"0.55rem 0.85rem",fontSize:"0.83rem",fontWeight:600}}>{bcStatus}</div>
+                            )}
+                            <div style={{display:"flex",justifyContent:"flex-end"}}>
+                                <button type="submit" disabled={bcLoading||!bcMsg.trim()}
+                                    style={{background:bcLoading||!bcMsg.trim()?"#ccc":"#e94560",color:"#fff",border:"none",padding:"0.6rem 1.8rem",borderRadius:9,fontWeight:700,fontSize:"0.86rem",cursor:bcLoading||!bcMsg.trim()?"not-allowed":"pointer",boxShadow:bcLoading||!bcMsg.trim()?"none":"0 3px 12px rgba(233,69,96,0.28)"}}>
+                                    {bcLoading?"Sending…":"📢 Send Broadcast"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
+
 
 /* ══ QUICK NAV per role ══ */
 const ROLE_NAV = {
     landlord:    [{label:"My Properties",to:"/landlord/properties",iconKey:"prop"},{label:"Add Property",to:"/landlord/add-property",iconKey:"plus"},{label:"Invoices",to:"/landlord/invoices",iconKey:"invoice"}],
     tenant:      [{label:"Search",to:"/tenant/search",iconKey:"search"},{label:"Payments",to:"/tenant/payments",iconKey:"pay"}],
     marketplace: [{label:"Browse Items",to:"/marketplace/items",iconKey:"bag"},{label:"Sell Item",to:"/marketplace/add-item",iconKey:"plus"},{label:"My Items",to:"/marketplace/my-items",iconKey:"prop"}],
-    admin:       [{label:"Users",to:"/admin/users",iconKey:"users"},{label:"Reports",to:"/admin/reports",iconKey:"report"},{label:"Transactions",to:"/admin/transactions",iconKey:"card"}],
+    admin:       [{label:"Users",to:"/admin/users",iconKey:"users"},{label:"Reports",to:"/admin/reports",iconKey:"report"},{label:"Transactions",to:"/admin/transactions",iconKey:"card"},{label:"Inbox",to:"/admin/inbox",iconKey:"inbox"},{label:"Browse Market",to:"/marketplace/items",iconKey:"bag"},{label:"Browse Rentals",to:"/",iconKey:"home"}],
 };
 
 /* ══ MAIN PROFILE COMPONENT ══ */

@@ -9,13 +9,11 @@ exports.sendMessage = async (req, res) => {
         let senderRole = req.headers.role;
         let { propertyId, itemId, receiverId, message } = req.body;
 
-        // Role guard: tenant, landlord, and marketplace users can send messages
-        const allowedRoles = ["tenant", "landlord", "marketplace"];
+        const allowedRoles = ["tenant", "landlord", "marketplace", "admin"];
         if (!allowedRoles.includes(senderRole)) {
             return res.status(403).json({ success: false, message: "You are not allowed to send messages." });
         }
 
-        // Verify receiver exists and has a valid role to receive messages
         let receiver = await userModel.findById(receiverId);
         if (!receiver) {
             return res.status(404).json({ success: false, message: "Receiver not found." });
@@ -178,6 +176,39 @@ exports.myTenants = async (req, res) => {
         ]);
 
         res.status(200).json({ success: true, message: "Tenants retrieved", data });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+    }
+};
+
+// Admin: Broadcast message to all users (or filtered by role)
+exports.broadcastMessage = async (req, res) => {
+    try {
+        const adminId = req.headers._id;
+        const role    = req.headers.role;
+        if (role !== "admin") {
+            return res.status(403).json({ success: false, message: "Only admin can broadcast messages." });
+        }
+        const { message, targetRole } = req.body; // targetRole optional: "tenant","landlord","marketplace" or omit for all
+        if (!message || !message.trim()) {
+            return res.status(400).json({ success: false, message: "Message text is required." });
+        }
+        const query = { _id: { $ne: adminId } };
+        if (targetRole) query.role = targetRole;
+        const users = await userModel.find(query).select("_id").lean();
+        if (users.length === 0) {
+            return res.status(404).json({ success: false, message: "No users found for that role." });
+        }
+        const docs = users.map(u => ({
+            property: null,
+            item:     null,
+            sender:   adminId,
+            receiver: u._id,
+            message:  message.trim(),
+            isRead:   false
+        }));
+        await messageModel.insertMany(docs);
+        res.status(200).json({ success: true, message: `Broadcast sent to ${docs.length} user(s).`, count: docs.length });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }
