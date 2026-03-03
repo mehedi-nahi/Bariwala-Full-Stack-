@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { generateInvoiceAPI, paymentHistoryAPI, myTenantsAPI } from "../../api/paymentAPI";
+import { generateInvoiceAPI, paymentHistoryAPI } from "../../api/paymentAPI";
+import { myTenantsAPI } from "../../api/messageAPI";
 import { searchTenantsAPI } from "../../api/userAPI";
 import { incomingRentalRequestsAPI } from "../../api/rentalRequestAPI";
 
