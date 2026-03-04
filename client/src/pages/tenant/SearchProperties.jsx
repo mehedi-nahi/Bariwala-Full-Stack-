@@ -143,7 +143,7 @@ const Chip = ({ label, onRemove }) => (
 /* ══════════════════════════════════════ */
 const SearchProperties = ({ user }) => {
     const [properties, setProperties] = useState([]);
-    const [filters,    setFilters]    = useState({ area:"", minRent:"", maxRent:"", propertyType:"", availability:"" });
+    const [filters,    setFilters]    = useState({ area:"", minRent:"", maxRent:"", propertyType:"" });
     const [facilities, setFacilities] = useState([]);
     const [loading,    setLoading]    = useState(false);
     const [loadingMore,setLoadingMore]= useState(false);
@@ -210,7 +210,7 @@ const SearchProperties = ({ user }) => {
     const toggleFacility = f => setFacilities(prev => prev.includes(f) ? prev.filter(x=>x!==f) : [...prev,f]);
 
     const handleReset = () => {
-        setFilters({area:"",minRent:"",maxRent:"",propertyType:"",availability:""});
+        setFilters({area:"",minRent:"",maxRent:"",propertyType:""});
         setFacilities([]); setSort("newest"); setPage(1);
         setTimeout(load, 0);
     };
@@ -220,7 +220,7 @@ const SearchProperties = ({ user }) => {
     const inp = {padding:"0.5rem 0.7rem",border:"1px solid #eee",borderRadius:8,
         fontSize:"0.86rem",background:"#fafafa",outline:"none",width:"100%",boxSizing:"border-box"};
 
-    const hasFilters = filters.area||filters.propertyType||filters.minRent||filters.maxRent||filters.availability||facilities.length>0;
+    const hasFilters = filters.area||filters.propertyType||filters.minRent||filters.maxRent||facilities.length>0;
 
     return (
         <div style={{background:"#fafaf8",minHeight:"100vh"}}>
@@ -319,7 +319,7 @@ const SearchProperties = ({ user }) => {
                         display:"flex",alignItems:"center",justifyContent:"center",gap:"0.4rem"}}>
                         <IC d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" size={14}/>
                         {showFilters ? "Hide Filters" : "Show Filters"}
-                        {(facilities.length>0||(filters.area||filters.propertyType||filters.minRent||filters.maxRent||filters.availability)) && (
+                        {(facilities.length>0||(filters.area||filters.propertyType||filters.minRent||filters.maxRent)) && (
                             <span style={{background:"#c0392b",color:"#fff",borderRadius:10,fontSize:"0.65rem",padding:"0.05rem 0.45rem",fontWeight:700}}>Active</span>
                         )}
                     </button>
@@ -347,16 +347,6 @@ const SearchProperties = ({ user }) => {
                         ))}
                     </div>
 
-                    {/* Availability */}
-                    <div style={{marginBottom:"1.1rem"}}>
-                        <span style={lbl}>Availability</span>
-                        {["","Available","Rented"].map(a=>(
-                            <label key={a} style={{display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.28rem 0",cursor:"pointer",fontSize:"0.85rem",color:filters.availability===a?"#e94560":"#444"}}>
-                                <input type="radio" name="availability" value={a} checked={filters.availability===a} onChange={handleChange} style={{accentColor:"#e94560",width:"auto"}}/>
-                                {a||"All"}
-                            </label>
-                        ))}
-                    </div>
 
                     {/* Rent Range */}
                     <div style={{marginBottom:"1.1rem"}}>
