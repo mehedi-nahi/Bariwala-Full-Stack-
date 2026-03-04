@@ -5,6 +5,7 @@ import { sendMessageAPI } from "../../api/messageAPI";
 import { createReportAPI } from "../../api/reportAPI";
 import { createReviewAPI, userReviewsAPI } from "../../api/reviewAPI";
 import { sendRentalRequestAPI, rentalRequestStatusAPI } from "../../api/rentalRequestAPI";
+import LoginPromptModal from "../../components/LoginPromptModal";
 
 const API_BASE = "";
 
@@ -173,6 +174,7 @@ const PropertyDetail = ({ user }) => {
     const [tab,       setTab]       = useState("details"); // details | contact | reviews
     const [rentRequest,    setRentRequest]    = useState(null);
     const [showRentModal,  setShowRentModal]  = useState(false);
+    const [loginModal,     setLoginModal]     = useState(false);
 
     useEffect(() => {
         singlePropertyAPI(id).then(res => {
@@ -335,7 +337,10 @@ const PropertyDetail = ({ user }) => {
                         {/* ── Tab nav ── */}
                         <div style={{ display:"flex", borderBottom:"1px solid #e8e4dc", marginBottom:"1.8rem" }}>
                             {TABS.map(t => (
-                                <button key={t.id} onClick={() => setTab(t.id)} style={{
+                                <button key={t.id} onClick={() => {
+                                    if (t.id === "contact" && !isTenant) { setLoginModal(true); return; }
+                                    setTab(t.id);
+                                }} style={{
                                     background:"none", border:"none", borderBottom: tab===t.id ? "2px solid #111" : "2px solid transparent",
                                     padding:"0.65rem 1rem", cursor:"pointer", fontSize:"0.78rem",
                                     fontWeight: tab===t.id ? 700 : 500, color: tab===t.id ? "#111" : "#888",
@@ -633,6 +638,15 @@ const PropertyDetail = ({ user }) => {
                                     )}
                                 </div>
                             )}
+                            {/* Non-tenant prompt */}
+                            {!isTenant && property.availability === "Available" && (
+                                <button onClick={() => setLoginModal(true)} style={{
+                                    marginTop:"1.2rem", width:"100%", background:"#111", color:"#fff",
+                                    border:"none", padding:"0.7rem", fontSize:"0.78rem",
+                                    textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, cursor:"pointer" }}>
+                                    🔒 Login to Rent
+                                </button>
+                            )}
                             <button onClick={() => navigate(-1)} style={{
                                 marginTop:8, width:"100%", background:"none",
                                 border:"1px solid #e8e4dc", color:"#888",
@@ -678,6 +692,18 @@ const PropertyDetail = ({ user }) => {
                         setRentRequest(req);
                         if (req) setShowRentModal(false);
                     }}
+                />
+            )}
+
+            {/* ── Login/Role Prompt Modal ── */}
+            {loginModal && (
+                <LoginPromptModal
+                    onClose={() => setLoginModal(false)}
+                    title={!user ? "Login Required" : "Tenant Account Required"}
+                    message={!user
+                        ? "You need to log in as a Tenant to contact landlords and request rentals. Register for free or log in to continue."
+                        : `You're logged in as a ${user.role}. Only Tenant accounts can message landlords or request rentals. Register a Tenant account to proceed.`
+                    }
                 />
             )}
 

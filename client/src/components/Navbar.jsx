@@ -10,7 +10,7 @@ const Brand = ({ role }) => {
                 <path d="M3 9.5L12 3l9 6.5V21H15v-6H9v6H3z"/>
             </svg>
             <span style={{ fontWeight:800, fontSize:"0.95rem", letterSpacing:"0.14em", textTransform:"uppercase", color:"#fff" }}>
-                BARIWALA<span style={{ color:"#c0392b" }}>MARKET</span>
+                BARI<span style={{ color:"#c0392b" }}>WALA</span>
             </span>
         </Link>
     );
@@ -29,6 +29,8 @@ const Navbar = ({ user, setUser }) => {
     const links = (
         <>
             {!user && <>
+                <Link to="/" onClick={close}>Rentals</Link>
+                <Link to="/marketplace/items" onClick={close}>Marketplace</Link>
                 <Link to="/login" onClick={close}>Login</Link>
                 <Link to="/register" onClick={close}>Register</Link>
             </>}
@@ -38,13 +40,16 @@ const Navbar = ({ user, setUser }) => {
                 <Link to="/landlord/add-property" onClick={close}>Add</Link>
                 <Link to="/landlord/invoices" onClick={close}>Invoices</Link>
                 <Link to="/landlord/inbox" onClick={close}>Inbox</Link>
+                <Link to="/marketplace/items" onClick={close}>Marketplace</Link>
             </>}
             {user?.role === "tenant" && <>
                 <Link to="/" onClick={close}>Home</Link>
                 <Link to="/tenant/inbox" onClick={close}>Inbox</Link>
                 <Link to="/tenant/payments" onClick={close}>Payments</Link>
+                <Link to="/marketplace/items" onClick={close}>Marketplace</Link>
             </>}
             {user?.role === "marketplace" && <>
+                <Link to="/" onClick={close}>Rentals</Link>
                 <Link to="/marketplace/items" onClick={close}>Home</Link>
                 <Link to="/marketplace/add-item" onClick={close}>Sell</Link>
                 <Link to="/marketplace/my-items" onClick={close}>My Items</Link>

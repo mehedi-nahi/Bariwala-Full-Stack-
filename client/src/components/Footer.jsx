@@ -81,7 +81,7 @@ const FAQSection = () => {
 
     return (
         <div style={{background:"#12121f",borderBottom:"1px solid rgba(255,255,255,0.07)"}}>
-            <div style={{maxWidth:1100,margin:"0 auto",padding:"3.5rem 2rem"}}>
+            <div style={{maxWidth:1100,margin:"0 auto",padding:"3.5rem 1.25rem"}}>
 
                 {/* Section header */}
                 <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",
@@ -96,7 +96,7 @@ const FAQSection = () => {
                                 FAQ
                             </span>
                         </div>
-                        <h2 style={{margin:0,fontSize:"1.65rem",fontWeight:800,color:"#fff",
+                        <h2 style={{margin:0,fontSize:"clamp(1.2rem,4vw,1.65rem)",fontWeight:800,color:"#fff",
                             letterSpacing:"-0.02em",lineHeight:1.2}}>
                             Frequently Asked{" "}
                             <span style={{background:"linear-gradient(90deg,#e94560,#ff7f8e)",
@@ -111,8 +111,12 @@ const FAQSection = () => {
                     </p>
                 </div>
 
-                {/* Two-column accordion grid */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 3.5rem"}}>
+                {/* Responsive accordion — stacks on mobile */}
+                <style>{`
+                    .faq-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 3.5rem; }
+                    @media(max-width:640px){ .faq-grid { grid-template-columns:1fr !important; } }
+                `}</style>
+                <div className="faq-grid">
                     <div>
                         {FAQS.slice(0,3).map((f,i)=>(
                             <FAQItem key={i} q={f.q} a={f.a}
@@ -172,17 +176,40 @@ const COLS = [
 const Footer = () => (
     <footer style={{background:"#1a1a2e",color:"#ccc",marginTop:"auto"}}>
 
+        <style>{`
+            .footer-top-grid {
+                max-width:1100px; margin:0 auto; padding:3rem 1.25rem;
+                display:grid; grid-template-columns:1.6fr repeat(4,1fr); gap:2.5rem;
+            }
+            .footer-payment-strip {
+                max-width:1100px; margin:0 auto; padding:1rem 1.25rem;
+                display:flex; align-items:center; justify-content:space-between;
+                flex-wrap:wrap; gap:1rem;
+            }
+            .footer-bottom-bar {
+                max-width:1100px; margin:0 auto; padding:1.1rem 1.25rem;
+                display:flex; align-items:center; justify-content:space-between;
+                flex-wrap:wrap; gap:0.75rem;
+            }
+            @media(max-width:900px){
+                .footer-top-grid { grid-template-columns:1fr 1fr !important; }
+            }
+            @media(max-width:540px){
+                .footer-top-grid { grid-template-columns:1fr !important; }
+                .footer-payment-strip { flex-direction:column; align-items:flex-start; }
+                .footer-bottom-bar { flex-direction:column; align-items:flex-start; }
+            }
+        `}</style>
+
         {/* ── FAQ ── */}
         <FAQSection />
 
         {/* ── Top strip ── */}
         <div style={{borderBottom:"1px solid rgba(255,255,255,0.07)"}}>
-            <div style={{maxWidth:1100,margin:"0 auto",padding:"3rem 2rem",
-                display:"grid",gridTemplateColumns:"1.6fr repeat(4,1fr)",gap:"2.5rem",flexWrap:"wrap"}}>
+            <div className="footer-top-grid">
 
                 {/* Brand */}
                 <div>
-                    {/* Logo mark */}
                     <Link to="/" style={{textDecoration:"none",display:"inline-flex",alignItems:"center",gap:"0.6rem",marginBottom:"1rem"}}>
                         <div style={{width:38,height:38,borderRadius:9,background:"linear-gradient(135deg,#e94560,#c0392b)",
                             display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 10px rgba(233,69,96,0.45)"}}>
@@ -202,8 +229,6 @@ const Footer = () => (
                     <p style={{fontSize:"0.83rem",lineHeight:1.7,color:"#888",maxWidth:240}}>
                         Connecting landlords, tenants and local buyers in one trusted platform across Bangladesh.
                     </p>
-
-                    {/* Contact line */}
                     <div style={{marginTop:"1.2rem",display:"flex",flexDirection:"column",gap:"0.5rem"}}>
                         {[
                             {d:"M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z", t:"support@bariwala.com"},
@@ -239,10 +264,9 @@ const Footer = () => (
             </div>
         </div>
 
-        {/* ── Payment methods strip (Interio-style) ── */}
+        {/* ── Payment methods strip ── */}
         <div style={{borderBottom:"1px solid rgba(255,255,255,0.07)"}}>
-            <div style={{maxWidth:1100,margin:"0 auto",padding:"1rem 2rem",
-                display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"1rem"}}>
+            <div className="footer-payment-strip">
                 <div style={{fontSize:"0.75rem",color:"#666",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>
                     Simulated Payment Methods
                 </div>
@@ -259,17 +283,12 @@ const Footer = () => (
         </div>
 
         {/* ── Bottom bar ── */}
-        <div style={{maxWidth:1100,margin:"0 auto",padding:"1.1rem 2rem",
-            display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"0.75rem"}}>
+        <div className="footer-bottom-bar">
             <div style={{fontSize:"0.78rem",color:"#555"}}>
                 © {new Date().getFullYear()} <span style={{color:"#e94560",fontWeight:700}}>Bariwala</span>. All rights reserved. · Built for academic purposes.
             </div>
-            <div style={{display:"flex",gap:"1.2rem"}}>
-                {[
-                    {label:"Privacy",    to:"/"},
-                    {label:"Terms",      to:"/"},
-                    {label:"Contact",    to:"/"},
-                ].map(l=>(
+            <div style={{display:"flex",gap:"1.2rem",flexWrap:"wrap"}}>
+                {[{label:"Privacy",to:"/"},{label:"Terms",to:"/"},{label:"Contact",to:"/"}].map(l=>(
                     <Link key={l.label} to={l.to} style={{color:"#555",textDecoration:"none",fontSize:"0.78rem",transition:"color 0.15s"}}
                         onMouseEnter={e=>e.currentTarget.style.color="#e94560"}
                         onMouseLeave={e=>e.currentTarget.style.color="#555"}>

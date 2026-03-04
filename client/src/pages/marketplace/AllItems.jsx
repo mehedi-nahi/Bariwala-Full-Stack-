@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { allItemsAPI, markAsSoldAPI } from "../../api/marketplaceAPI";
+import LoginPromptModal from "../../components/LoginPromptModal";
 
 /* ══ CONSTANTS ══════════════════════════════════════════════════ */
 const CATEGORIES = [
@@ -305,7 +306,7 @@ const MarketplaceGateway = ({ cart, onClose, onSuccess }) => {
 };
 
 /* ══ PRODUCT CARD ════════════════════════════════════════════════ */
-const ProductCard = ({ item, inCart, onAddCart }) => {
+const ProductCard = ({ item, inCart, onAddCart, onGuestCart }) => {
     const [hov, setHov] = useState(false);
     const img = item.images?.[0] ? item.images[0] : null;
     return (
@@ -327,10 +328,10 @@ const ProductCard = ({ item, inCart, onAddCart }) => {
                 </span>
                 <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(26,26,46,0.9)",
                     padding:"0.55rem 0.6rem",transform:hov?"translateY(0)":"translateY(100%)",transition:"transform 0.25s",display:"flex",gap:"0.4rem"}}>
-                    <button onClick={e=>{e.stopPropagation();onAddCart(item);}} disabled={inCart}
-                        style={{flex:1,background:inCart?"#27ae60":"#e94560",color:"#fff",border:"none",
-                            padding:"0.42rem",fontWeight:700,fontSize:"0.74rem",cursor:inCart?"default":"pointer",borderRadius:6}}>
-                        {inCart?"✓ Added":"+ Cart"}
+                    <button onClick={e=>{e.stopPropagation(); onGuestCart ? onGuestCart() : onAddCart(item);}} disabled={inCart&&!onGuestCart}
+                        style={{flex:1,background:inCart&&!onGuestCart?"#27ae60":"#e94560",color:"#fff",border:"none",
+                            padding:"0.42rem",fontWeight:700,fontSize:"0.74rem",cursor:inCart&&!onGuestCart?"default":"pointer",borderRadius:6}}>
+                        {inCart&&!onGuestCart?"✓ Added":"+ Cart"}
                     </button>
                     <Link to={`/marketplace/item/${item._id}`}
                         style={{background:"rgba(255,255,255,0.12)",color:"#fff",border:"1px solid rgba(255,255,255,0.2)",
@@ -350,7 +351,7 @@ const ProductCard = ({ item, inCart, onAddCart }) => {
 };
 
 /* ══ WEEKLY DEALS PANEL ═════════════════════════════════════════ */
-const DealsPanel = ({ items, cart, onAddCart }) => {
+const DealsPanel = ({ items, cart, onAddCart, onGuestCart }) => {
     const deals = items.slice(0,5);
     if(!deals.length) return null;
     return (
@@ -375,11 +376,11 @@ const DealsPanel = ({ items, cart, onAddCart }) => {
                             <div style={{fontWeight:600,fontSize:"0.78rem",color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
                             <span style={{fontWeight:800,color:"#e94560",fontSize:"0.82rem"}}>৳{item.price?.toLocaleString()}</span>
                         </div>
-                        <button onClick={()=>onAddCart(item)} disabled={inCart}
-                            style={{background:inCart?"#f0faf4":"#fff0f2",color:inCart?"#27ae60":"#e94560",
-                                border:`1px solid ${inCart?"#c3e6cb":"#f5c6cb"}`,
-                                borderRadius:7,padding:"0.28rem 0.6rem",fontSize:"0.7rem",fontWeight:700,cursor:inCart?"default":"pointer",flexShrink:0}}>
-                            {inCart?"✓":"+"}
+                        <button onClick={()=> onGuestCart ? onGuestCart() : onAddCart(item)} disabled={inCart&&!onGuestCart}
+                            style={{background:inCart&&!onGuestCart?"#f0faf4":"#fff0f2",color:inCart&&!onGuestCart?"#27ae60":"#e94560",
+                                border:`1px solid ${inCart&&!onGuestCart?"#c3e6cb":"#f5c6cb"}`,
+                                borderRadius:7,padding:"0.28rem 0.6rem",fontSize:"0.7rem",fontWeight:700,cursor:inCart&&!onGuestCart?"default":"pointer",flexShrink:0}}>
+                            {inCart&&!onGuestCart?"✓":"+"}
                         </button>
                     </div>
                 );
@@ -389,7 +390,7 @@ const DealsPanel = ({ items, cart, onAddCart }) => {
 };
 
 /* ══ HERO BANNER ════════════════════════════════════════════════ */
-const HeroBanner = ({ items, cart, onAddCart }) => {
+const HeroBanner = ({ items, cart, onAddCart, onGuestCart }) => {
     const [idx, setIdx] = useState(0);
     const featured = items.slice(0,5);
     useEffect(()=>{
@@ -425,11 +426,11 @@ const HeroBanner = ({ items, cart, onAddCart }) => {
                     </p>
                     <div style={{fontSize:"1.8rem",fontWeight:900,color:"#e94560",marginBottom:"1.2rem"}}>৳{item.price?.toLocaleString()}</div>
                     <div style={{display:"flex",gap:"0.65rem",flexWrap:"wrap"}}>
-                        <button onClick={()=>onAddCart(item)} disabled={inCart}
-                            style={{background:inCart?"rgba(39,174,96,0.85)":"#e94560",color:"#fff",border:"none",
-                                padding:"0.72rem 1.5rem",fontWeight:700,fontSize:"0.85rem",cursor:inCart?"default":"pointer",
+                        <button onClick={()=> onGuestCart ? onGuestCart() : onAddCart(item)} disabled={inCart&&!onGuestCart}
+                            style={{background:inCart&&!onGuestCart?"rgba(39,174,96,0.85)":"#e94560",color:"#fff",border:"none",
+                                padding:"0.72rem 1.5rem",fontWeight:700,fontSize:"0.85rem",cursor:inCart&&!onGuestCart?"default":"pointer",
                                 borderRadius:9,boxShadow:"0 4px 14px rgba(233,69,96,0.35)"}}>
-                            {inCart?"✓ In Cart":"Add to Cart"}
+                            {inCart&&!onGuestCart?"✓ In Cart":"Add to Cart"}
                         </button>
                         <Link to={`/marketplace/item/${item._id}`}
                             style={{background:"rgba(255,255,255,0.07)",color:"#fff",border:"1px solid rgba(255,255,255,0.18)",
@@ -518,7 +519,11 @@ const BrandStrip = () => (
 /* ══ MAIN PAGE ══════════════════════════════════════════════════ */
 const PAGE_SIZE = 20;
 
-const AllItems = () => {
+const AllItems = ({ user }) => {
+    // Only marketplace-role users can cart/buy/checkout. Everyone else sees a prompt.
+    const isMarketplaceUser = user?.role === "marketplace";
+    const canBuy = isMarketplaceUser;
+
     const [items,        setItems]        = useState([]);
     const [allItems,     setAllItems]     = useState([]);
     const [page,         setPage]         = useState(1);
@@ -535,8 +540,18 @@ const AllItems = () => {
     const [showCart,     setShowCart]     = useState(false);
     const [showGateway,  setShowGateway]  = useState(false);
     const [orderSuccess, setOrderSuccess] = useState("");
+    const [loginModal,   setLoginModal]   = useState(false);
     const productsRef    = useRef(null);
-    const sentinelRef    = useRef(null); // bottom of grid — triggers load-more
+    const sentinelRef    = useRef(null);
+
+    // Called when a non-marketplace user tries to add to cart or checkout
+    const promptLogin = () => setLoginModal(true);
+
+    // Modal copy depends on whether they are logged in with wrong role
+    const loginModalTitle   = user ? "Marketplace Account Required" : "Login Required";
+    const loginModalMessage = user
+        ? `You're logged in as a ${user.role}. Cart, checkout and messaging features require a Marketplace account. Register a separate Marketplace account to shop!`
+        : "You need a Marketplace account to add items to cart, place orders, or message sellers. Register for free or log in to start shopping!";
 
     // ── Load page 1 (or on filter change) ──
     const loadFresh = async (params={}) => {
@@ -660,11 +675,11 @@ const AllItems = () => {
             <div style={{background:"#1a1a2e",borderBottom:"2px solid #e94560",padding:"0 2rem",
                 display:"flex",justifyContent:"flex-end",alignItems:"center",height:46,
                 position:"sticky",top:0,zIndex:200,boxShadow:"0 2px 12px rgba(0,0,0,0.3)"}}>
-                <button onClick={()=>setShowCart(true)}
+                <button onClick={()=> canBuy ? setShowCart(true) : promptLogin()}
                     style={{background:"#e94560",color:"#fff",border:"none",padding:"0.4rem 1rem",cursor:"pointer",
                         fontWeight:700,fontSize:"0.79rem",borderRadius:7,display:"flex",alignItems:"center",gap:"0.45rem"}}>
                     🛒 Cart
-                    {cart.length>0&&<span style={{background:"#fff",color:"#e94560",borderRadius:"50%",width:17,height:17,
+                    {canBuy && cart.length>0&&<span style={{background:"#fff",color:"#e94560",borderRadius:"50%",width:17,height:17,
                         display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.58rem",fontWeight:800}}>{cart.length}</span>}
                 </button>
             </div>
@@ -673,7 +688,7 @@ const AllItems = () => {
             {orderSuccess&&<div style={{background:"#f0faf4",borderBottom:"1px solid #c3e6cb",padding:"0.65rem 2rem",color:"#1a6e3c",fontSize:"0.85rem",fontWeight:600}}>✅ {orderSuccess}</div>}
 
             {/* ══ HERO ══ */}
-            <HeroBanner items={allItems} cart={cart} onAddCart={addToCart}/>
+            <HeroBanner items={allItems} cart={cart} onAddCart={addToCart} onGuestCart={!canBuy ? promptLogin : null}/>
 
             {/* ══ PROMO BANNERS ══ */}
             <PromoBanners/>
@@ -758,7 +773,7 @@ const AllItems = () => {
                         <>
                             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:"0.8rem"}}>
                                 {items.map(item=>(
-                                    <ProductCard key={item._id} item={item} inCart={cart.some(c=>c._id===item._id)} onAddCart={addToCart}/>
+                                    <ProductCard key={item._id} item={item} inCart={cart.some(c=>c._id===item._id)} onAddCart={addToCart} onGuestCart={!canBuy ? promptLogin : null}/>
                                 ))}
                             </div>
                             {/* Sentinel div — IntersectionObserver watches this */}
@@ -780,12 +795,15 @@ const AllItems = () => {
 
                 {/* RIGHT COLUMN */}
                 <div className="mkt-right-col">
-                    <DealsPanel items={allItems} cart={cart} onAddCart={addToCart}/>
+                    <DealsPanel items={allItems} cart={cart} onAddCart={addToCart} onGuestCart={!canBuy ? promptLogin : null}/>
                     <div style={{background:"linear-gradient(135deg,#1a1a2e,#2c3e50)",borderRadius:12,padding:"1.1rem",textAlign:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.12)"}}>
                         <div style={{fontSize:"1.7rem",marginBottom:"0.45rem"}}>🏷️</div>
                         <h4 style={{color:"#fff",fontWeight:800,margin:"0 0 0.3rem",fontSize:"0.86rem"}}>Have something to sell?</h4>
                         <p style={{color:"rgba(255,255,255,0.45)",fontSize:"0.73rem",margin:"0 0 0.85rem",lineHeight:1.5}}>List your items and reach buyers instantly.</p>
-                        <Link to="/marketplace/add-item" style={{display:"block",background:"#e94560",color:"#fff",textDecoration:"none",padding:"0.58rem",borderRadius:8,fontWeight:700,fontSize:"0.78rem",boxShadow:"0 3px 10px rgba(233,69,96,0.3)"}}>+ List an Item</Link>
+                        {canBuy
+                            ? <Link to="/marketplace/add-item" style={{display:"block",background:"#e94560",color:"#fff",textDecoration:"none",padding:"0.58rem",borderRadius:8,fontWeight:700,fontSize:"0.78rem",boxShadow:"0 3px 10px rgba(233,69,96,0.3)"}}>+ List an Item</Link>
+                            : <button onClick={promptLogin} style={{display:"block",width:"100%",background:"#e94560",color:"#fff",border:"none",padding:"0.58rem",borderRadius:8,fontWeight:700,fontSize:"0.78rem",cursor:"pointer",boxShadow:"0 3px 10px rgba(233,69,96,0.3)"}}>+ List an Item</button>
+                        }
                     </div>
                 </div>
             </div>
@@ -795,10 +813,19 @@ const AllItems = () => {
             <div style={{height:"2rem"}}/>
 
             {/* ══ CART SIDEBAR ══ */}
-            {showCart&&<CartSidebar cart={cart} onRemove={removeCart} onClose={()=>setShowCart(false)} onCheckout={()=>{setShowCart(false);setShowGateway(true);}}/>}
+            {canBuy && showCart&&<CartSidebar cart={cart} onRemove={removeCart} onClose={()=>setShowCart(false)} onCheckout={()=>{setShowCart(false);setShowGateway(true);}}/>}
 
             {/* ══ PAYMENT GATEWAY ══ */}
-            {showGateway&&<MarketplaceGateway cart={cart} onClose={()=>setShowGateway(false)} onSuccess={handlePaymentSuccess}/>}
+            {canBuy && showGateway&&<MarketplaceGateway cart={cart} onClose={()=>setShowGateway(false)} onSuccess={handlePaymentSuccess}/>}
+
+            {/* ══ LOGIN PROMPT ══ */}
+            {loginModal && (
+                <LoginPromptModal
+                    onClose={()=>setLoginModal(false)}
+                    title={loginModalTitle}
+                    message={loginModalMessage}
+                />
+            )}
         </div>
     );
 };

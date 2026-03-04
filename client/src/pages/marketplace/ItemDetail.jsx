@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { singleItemAPI } from "../../api/marketplaceAPI";
 import { sendMessageAPI } from "../../api/messageAPI";
 import { createReportAPI } from "../../api/reportAPI";
+import LoginPromptModal from "../../components/LoginPromptModal";
 
 const AVATAR_COLORS = ["#e94560","#1a1a2e","#2980b9","#27ae60","#8e44ad","#e67e22"];
 const Avatar = ({ name, size=44 }) => {
@@ -36,6 +37,7 @@ const ItemDetail = ({ user }) => {
     const [reportMsg, setReportMsg]= useState("");
     const [tab,       setTab]      = useState("overview");
     const [inCart,    setInCart]   = useState(false);
+    const [loginModal, setLoginModal] = useState(false);
 
     useEffect(() => {
         singleItemAPI(id).then(res => {
@@ -80,12 +82,19 @@ const ItemDetail = ({ user }) => {
     const seller     = item.sellerInfo?.[0];
     const images     = item.images || [];
     const isLoggedIn = !!user;
-    // Both marketplace users AND other roles can message the seller in the marketplace
-    const canMessage = isLoggedIn && seller && user._id !== seller._id;
+    const isMarketplaceUser = user?.role === "marketplace";
+    // Only marketplace users can message/cart. Others see a prompt.
+    const canMessage = isMarketplaceUser && seller && user._id !== seller._id;
+    const promptLogin = () => setLoginModal(true);
+    const loginModalTitle   = user ? "Marketplace Account Required" : "Login Required";
+    const loginModalMessage = user
+        ? `You're logged in as a ${user.role}. Messaging and cart features require a Marketplace account.`
+        : "You need a Marketplace account to contact sellers or add items to cart.";
 
     const TABS = [
         { id:"overview", label:"Overview" },
-        ...(canMessage ? [{ id:"contact", label:"Contact Seller" }] : []),
+        // Show Contact tab to everyone except the item's own seller
+        ...(seller && (!user || user._id !== seller._id) ? [{ id:"contact", label:"Contact Seller" }] : []),
     ];
 
     return (
@@ -159,7 +168,10 @@ const ItemDetail = ({ user }) => {
                         {/* Tab Nav */}
                         <div style={{display:"flex",gap:0,borderBottom:"2px solid #eee",marginBottom:"1.5rem",marginTop:"1.2rem"}}>
                             {TABS.map(t=>(
-                                <button key={t.id} onClick={()=>setTab(t.id)} style={{
+                                <button key={t.id} onClick={()=>{
+                                    if(t.id==="contact" && !canMessage) { promptLogin(); return; }
+                                    setTab(t.id);
+                                }} style={{
                                     background:"none",border:"none",padding:"0.7rem 1.2rem",cursor:"pointer",
                                     fontSize:"0.88rem",fontWeight:700,
                                     color:tab===t.id?"#e94560":"#888",
@@ -237,19 +249,25 @@ const ItemDetail = ({ user }) => {
                                         </button>
                                         {msgSent && <p style={{marginTop:"0.6rem",fontSize:"0.85rem",color:msgSent.startsWith("✅")?"#27ae60":"#e74c3c"}}>{msgSent}</p>}
                                     </div>
-                                ) : !isLoggedIn ? (
+                                ) : (
                                     <div style={{background:"#fff",borderRadius:12,padding:"2.5rem",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",textAlign:"center"}}>
                                         <div style={{width:56,height:56,borderRadius:"50%",background:"#fff0f2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 1rem"}}>
                                             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e94560" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                                         </div>
-                                        <h3 style={{color:"#1a1a2e",fontWeight:700,marginBottom:"0.5rem"}}>Login to Contact</h3>
-                                        <p style={{color:"#888",fontSize:"0.88rem",marginBottom:"1.2rem"}}>You need to log in to message this seller.</p>
+                                        <h3 style={{color:"#1a1a2e",fontWeight:700,marginBottom:"0.5rem"}}>
+                                            {user ? "Marketplace Account Required" : "Login to Contact"}
+                                        </h3>
+                                        <p style={{color:"#888",fontSize:"0.88rem",marginBottom:"1.2rem"}}>
+                                            {user
+                                                ? `You're logged in as a ${user.role}. Only Marketplace accounts can message sellers.`
+                                                : "You need to log in with a Marketplace account to message this seller."}
+                                        </p>
                                         <div style={{display:"flex",gap:"0.8rem",justifyContent:"center"}}>
                                             <a href="/login" style={{background:"#e94560",color:"#fff",padding:"0.6rem 1.6rem",borderRadius:8,fontWeight:700,fontSize:"0.9rem",textDecoration:"none"}}>Login</a>
                                             <a href="/register" style={{background:"#f5f5f5",color:"#555",padding:"0.6rem 1.6rem",borderRadius:8,fontWeight:700,fontSize:"0.9rem",textDecoration:"none"}}>Register</a>
                                         </div>
                                     </div>
-                                ) : null}
+                                )}
                             </div>
                         )}
                     </div>
@@ -275,8 +293,9 @@ const ItemDetail = ({ user }) => {
                                     </div>
                                 )}
                             </div>
-                            {canMessage && (
-                                <button onClick={()=>setTab("contact")}
+                            {/* Contact Seller button — show to everyone except own seller */}
+                            {seller && (!user || user._id !== seller._id) && (
+                                <button onClick={()=> canMessage ? setTab("contact") : promptLogin()}
                                     style={{marginTop:"1rem",width:"100%",background:"#e94560",color:"#fff",
                                         border:"none",padding:"0.8rem",borderRadius:10,fontWeight:700,
                                         cursor:"pointer",fontSize:"0.95rem"}}>
@@ -285,31 +304,23 @@ const ItemDetail = ({ user }) => {
                             )}
                             {/* ── ADD TO CART ── */}
                             <button
-                                onClick={handleAddCart}
-                                disabled={inCart || item.isSold}
+                                onClick={()=> { if(!isMarketplaceUser){ promptLogin(); return; } handleAddCart(); }}
+                                disabled={(inCart || item.isSold) && isMarketplaceUser}
                                 style={{marginTop:"0.6rem",width:"100%",
-                                    background: item.isSold ? "#f0f0f0" : inCart ? "#f0faf4" : "linear-gradient(90deg,#1a1a2e,#2c3e50)",
-                                    color: item.isSold ? "#aaa" : inCart ? "#27ae60" : "#fff",
-                                    border:`1px solid ${item.isSold?"#ddd":inCart?"#c3e6cb":"transparent"}`,
+                                    background: item.isSold ? "#f0f0f0" : (inCart && isMarketplaceUser) ? "#f0faf4" : "linear-gradient(90deg,#1a1a2e,#2c3e50)",
+                                    color: item.isSold ? "#aaa" : (inCart && isMarketplaceUser) ? "#27ae60" : "#fff",
+                                    border:`1px solid ${item.isSold?"#ddd":(inCart && isMarketplaceUser)?"#c3e6cb":"transparent"}`,
                                     padding:"0.8rem",borderRadius:10,fontWeight:700,
-                                    cursor: (inCart||item.isSold) ? "default":"pointer",fontSize:"0.9rem",
-                                    boxShadow: (inCart||item.isSold) ? "none":"0 4px 12px rgba(26,26,46,0.25)"}}>
-                                {item.isSold ? "🚫 Already Sold" : inCart ? "✓ Added to Cart" : "🛒 Add to Cart"}
+                                    cursor: (item.isSold || (inCart && isMarketplaceUser)) ? "default":"pointer",fontSize:"0.9rem",
+                                    boxShadow: (item.isSold || (inCart && isMarketplaceUser)) ? "none":"0 4px 12px rgba(26,26,46,0.25)"}}>
+                                {item.isSold ? "🚫 Already Sold" : (inCart && isMarketplaceUser) ? "✓ Added to Cart" : "🛒 Add to Cart"}
                             </button>
-                            {inCart && !item.isSold && (
+                            {(inCart && isMarketplaceUser) && !item.isSold && (
                                 <div style={{textAlign:"center",marginTop:"0.4rem"}}>
                                     <a href="/marketplace/items" style={{fontSize:"0.78rem",color:"#e94560",fontWeight:600,textDecoration:"none"}}>
                                         → Go to Cart on Homepage
                                     </a>
                                 </div>
-                            )}
-                            {!isLoggedIn && (
-                                <a href="/login"
-                                    style={{marginTop:"1rem",display:"block",width:"100%",background:"#e94560",color:"#fff",
-                                        border:"none",padding:"0.8rem",borderRadius:10,fontWeight:700,
-                                        cursor:"pointer",fontSize:"0.95rem",textAlign:"center",textDecoration:"none",boxSizing:"border-box"}}>
-                                    🔒 Login to Contact
-                                </a>
                             )}
                             <button onClick={()=>navigate("/marketplace/items")}
                                 style={{marginTop:"0.5rem",width:"100%",background:"none",border:"1px solid #eee",
@@ -338,6 +349,15 @@ const ItemDetail = ({ user }) => {
                     </div>
                 </div>
             </div>
+
+            {/* ── LOGIN PROMPT MODAL ── */}
+            {loginModal && (
+                <LoginPromptModal
+                    onClose={()=>setLoginModal(false)}
+                    title={loginModalTitle}
+                    message={loginModalMessage}
+                />
+            )}
         </div>
     );
 };

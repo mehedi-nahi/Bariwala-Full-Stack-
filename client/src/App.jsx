@@ -60,7 +60,7 @@ const App = () => {
                 <Route path="/register"                 element={<Register />} />
                 <Route path="/login"                    element={<Login setUser={setUser} />} />
                 <Route path="/property/:id"             element={<PropertyDetail user={user} />} />
-                <Route path="/marketplace/items"        element={<AllItems />} />
+                <Route path="/marketplace/items"        element={<AllItems user={user} />} />
                 <Route path="/marketplace/item/:id"     element={<ItemDetail user={user} />} />
 
                 {/* Shared */}
