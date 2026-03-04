@@ -15,13 +15,16 @@ const connectDB = require("./src/config/db");
 const router    = require("./src/routes/api.js");
 
 const app = express();
-
-// This is the correct pattern for Vercel serverless (no persistent process).
-let dbConnected = false;
+// Lazy DB connection — connect on first request, reuse cached connection.
+// Correct pattern for Vercel serverless (no persistent process).
 app.use(async (req, res, next) => {
-    if (!dbConnected || mongoose.connection.readyState !== 1) {
-        await connectDB();
-        dbConnected = true;
+    if (mongoose.connection.readyState !== 1) {
+        try {
+            await connectDB();
+        } catch (err) {
+            console.error("DB connection error:", err.message);
+            return res.status(503).json({ success: false, message: "Database unavailable. " + err.message });
+        }
     }
     next();
 });
