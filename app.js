@@ -1,21 +1,30 @@
 const dotENV = require("dotenv");
 dotENV.config();
 
-const path = require("path");
-const express = require("express");
-const rateLimit= require("express-rate-limit");
-const helmet      = require("helmet");
+const path          = require("path");
+const express       = require("express");
+const rateLimit     = require("express-rate-limit");
+const helmet        = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 const hpp           = require("hpp");
 const cors          = require("cors");
 const cookieParser  = require("cookie-parser");
+const mongoose      = require("mongoose");
 
 const connectDB = require("./src/config/db");
 const router    = require("./src/routes/api.js");
 
 const app = express();
 
-connectDB();
+// This is the correct pattern for Vercel serverless (no persistent process).
+let dbConnected = false;
+app.use(async (req, res, next) => {
+    if (!dbConnected || mongoose.connection.readyState !== 1) {
+        await connectDB();
+        dbConnected = true;
+    }
+    next();
+});
 
 app.use(cookieParser());
 app.use(helmet());
@@ -36,12 +45,14 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
 
 app.use("/api/v1", router);
 
-const clientDist = path.join(__dirname, "client", "dist");
-app.use(express.static(clientDist));
-
-app.get(/^(?!\/api).*/, (req, res) => {
-    res.sendFile(path.join(clientDist, "index.html"));
-});
+// Serve React build in local production (not needed on Vercel — CDN handles it)
+if (process.env.NODE_ENV !== "production") {
+    const clientDist = path.join(__dirname, "client", "dist");
+    app.use(express.static(clientDist));
+    app.get(/^(?!\/api).*/, (req, res) => {
+        res.sendFile(path.join(clientDist, "index.html"));
+    });
+}
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
