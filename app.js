@@ -48,14 +48,12 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
 
 app.use("/api/v1", router);
 
-// Serve React build in local production (not needed on Vercel — CDN handles it)
-if (process.env.NODE_ENV !== "production") {
-    const clientDist = path.join(__dirname, "client", "dist");
-    app.use(express.static(clientDist));
-    app.get(/^(?!\/api).*/, (req, res) => {
-        res.sendFile(path.join(clientDist, "index.html"));
-    });
-}
+// Serve React build (works both locally and on Vercel serverless)
+const clientDist = path.join(__dirname, "client", "dist");
+app.use(express.static(clientDist));
+app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+});
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
