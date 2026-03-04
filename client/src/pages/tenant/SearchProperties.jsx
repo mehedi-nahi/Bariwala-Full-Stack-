@@ -151,6 +151,7 @@ const SearchProperties = ({ user }) => {
     const [page,       setPage]       = useState(1);
     const [sort,       setSort]       = useState("newest");
     const [showRegisterModal, setShowRegisterModal] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
     const isMarketplace = user?.role === "marketplace";
     const navigate = useNavigate();
 
@@ -308,10 +309,24 @@ const SearchProperties = ({ user }) => {
             )}
 
             {/* ══ MAIN LAYOUT ══ */}
-            <div style={{maxWidth:1240,margin:"0 auto",padding:"2rem 1.5rem",display:"flex",gap:"1.5rem",alignItems:"flex-start"}}>
+            <div style={{maxWidth:1240,margin:"0 auto",padding:"2rem 1rem",display:"flex",gap:"1.5rem",alignItems:"flex-start",flexWrap:"wrap"}}>
+
+                {/* Mobile filter toggle */}
+                <div style={{width:"100%",display:"none"}} className="mobile-filter-toggle">
+                    <button onClick={()=>setShowFilters(f=>!f)} style={{
+                        width:"100%",background:"#111",color:"#fff",border:"none",
+                        padding:"0.65rem",borderRadius:9,fontWeight:700,cursor:"pointer",fontSize:"0.88rem",
+                        display:"flex",alignItems:"center",justifyContent:"center",gap:"0.4rem"}}>
+                        <IC d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" size={14}/>
+                        {showFilters ? "Hide Filters" : "Show Filters"}
+                        {(facilities.length>0||(filters.area||filters.propertyType||filters.minRent||filters.maxRent||filters.availability)) && (
+                            <span style={{background:"#c0392b",color:"#fff",borderRadius:10,fontSize:"0.65rem",padding:"0.05rem 0.45rem",fontWeight:700}}>Active</span>
+                        )}
+                    </button>
+                </div>
 
                 {/* ── SIDEBAR ── */}
-                <div style={{width:210,flexShrink:0,background:"#fff",borderRadius:12,
+                <div className={`search-sidebar${showFilters ? " sidebar-open" : ""}`} style={{width:210,flexShrink:0,background:"#fff",borderRadius:12,
                     boxShadow:"0 1px 8px rgba(0,0,0,0.07)",padding:"1.2rem",position:"sticky",top:72}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.1rem"}}>
                         <h3 style={{fontWeight:700,color:"#1a1a2e",fontSize:"0.92rem",margin:0,display:"flex",alignItems:"center",gap:"0.4rem"}}>
@@ -370,7 +385,7 @@ const SearchProperties = ({ user }) => {
                         </div>
                     </div>
 
-                    <button onClick={load} style={{width:"100%",background:"#e94560",color:"#fff",border:"none",
+                    <button onClick={()=>{load();setShowFilters(false);}} style={{width:"100%",background:"#e94560",color:"#fff",border:"none",
                         padding:"0.65rem",borderRadius:9,fontWeight:700,cursor:"pointer",fontSize:"0.88rem",
                         display:"flex",alignItems:"center",justifyContent:"center",gap:"0.4rem"}}>
                         <IC d="M21 21l-4.35-4.35m0 0A7 7 0 103.65 3.65a7 7 0 0012.99 13z" size={14}/>
@@ -482,6 +497,12 @@ const SearchProperties = ({ user }) => {
         <style>{`
                 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
                 @keyframes spin    { to{transform:rotate(360deg)} }
+                .search-sidebar { display: block; }
+                @media (max-width: 768px) {
+                    .mobile-filter-toggle { display: block !important; }
+                    .search-sidebar { display: none; width: 100% !important; position: static !important; }
+                    .search-sidebar.sidebar-open { display: block; }
+                }
             `}</style>
             {showRegisterModal && <RegisterPromptModal onClose={()=>setShowRegisterModal(false)}/>}
         </div>

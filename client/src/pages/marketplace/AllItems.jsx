@@ -642,6 +642,18 @@ const AllItems = () => {
             <style>{`
                 @keyframes spin    { to { transform: rotate(360deg); } }
                 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+                .mkt-3col { display:grid; grid-template-columns:196px 1fr 236px; gap:1.1rem; align-items:flex-start; box-sizing:border-box; }
+                .mkt-filter-sidebar { display:block; }
+                .mkt-right-col { display:flex; flex-direction:column; gap:1rem; position:sticky; top:54; }
+                @media(max-width:900px){
+                    .mkt-3col { grid-template-columns:1fr!important; }
+                    .mkt-filter-sidebar { display:none; }
+                    .mkt-filter-sidebar.open { display:block!important; }
+                    .mkt-right-col { position:static!important; flex-direction:row!important; flex-wrap:wrap!important; }
+                }
+                @media(max-width:480px){
+                    .mkt-right-col { flex-direction:column!important; }
+                }
             `}</style>
 
             {/* ══ TOP NAV BAR ══ */}
@@ -667,12 +679,10 @@ const AllItems = () => {
             <PromoBanners/>
 
             {/* ══ 3-COL LAYOUT ══ */}
-            <div style={{maxWidth:1200,margin:"1.5rem auto 2rem",padding:"0 1.5rem",
-                display:"grid",gridTemplateColumns:"196px 1fr 236px",gap:"1.1rem",
-                alignItems:"flex-start",boxSizing:"border-box"}}>
+            <div className="mkt-3col" style={{maxWidth:1200,margin:"1.5rem auto 2rem",padding:"0 1rem"}}>
 
                 {/* FILTER SIDEBAR */}
-                <div style={{background:"#fff",borderRadius:12,padding:"0.95rem",
+                <div className="mkt-filter-sidebar" style={{background:"#fff",borderRadius:12,padding:"0.95rem",
                     boxShadow:"0 2px 10px rgba(0,0,0,0.06)",border:"1px solid #f0f0f0",position:"sticky",top:54}}>
                     <h3 style={{fontWeight:800,fontSize:"0.78rem",color:"#1a1a2e",margin:"0 0 0.9rem",
                         textTransform:"uppercase",letterSpacing:"0.07em",display:"flex",alignItems:"center",gap:"0.4rem"}}>
@@ -769,7 +779,7 @@ const AllItems = () => {
                 </div>
 
                 {/* RIGHT COLUMN */}
-                <div style={{position:"sticky",top:54,display:"flex",flexDirection:"column",gap:"1rem"}}>
+                <div className="mkt-right-col">
                     <DealsPanel items={allItems} cart={cart} onAddCart={addToCart}/>
                     <div style={{background:"linear-gradient(135deg,#1a1a2e,#2c3e50)",borderRadius:12,padding:"1.1rem",textAlign:"center",boxShadow:"0 2px 10px rgba(0,0,0,0.12)"}}>
                         <div style={{fontSize:"1.7rem",marginBottom:"0.45rem"}}>🏷️</div>

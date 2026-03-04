@@ -358,7 +358,7 @@ const AdminSection = () => {
                     </div>
 
                     {/* Recent Users + Recent Transactions */}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                    <div className="admin-two-col">
                         <div>
                             <SH title="Recent Rental Users" to="/admin/users"/>
                             <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
@@ -578,9 +578,19 @@ const Profile = () => {
 
     return (
         <div style={{background:"#f5f6fa",minHeight:"100vh",paddingBottom:"3rem"}}>
+            <style>{`
+                .profile-main-grid{display:grid;grid-template-columns:240px 1fr;gap:1.4rem;align-items:flex-start}
+                .admin-two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+                @media(max-width:768px){
+                    .profile-main-grid{grid-template-columns:1fr!important}
+                    .admin-two-col{grid-template-columns:1fr!important}
+                    .profile-header{padding:1.5rem 1rem 4rem!important}
+                    .profile-main-wrap{padding:0 0.75rem!important}
+                }
+            `}</style>
 
             {/* Header */}
-            <div style={{background:"linear-gradient(135deg,#1a1a2e 60%,#e94560)",padding:"2rem 2rem 5rem",color:"#fff"}}>
+            <div className="profile-header" style={{background:"linear-gradient(135deg,#1a1a2e 60%,#e94560)",padding:"2rem 2rem 5rem",color:"#fff"}}>
                 <div style={{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",gap:"1.2rem",flexWrap:"wrap"}}>
                     <Avatar name={profile.name} size={60}/>
                     <div>
@@ -594,7 +604,7 @@ const Profile = () => {
             </div>
 
             {/* Main grid */}
-            <div style={{maxWidth:1100,margin:"-3rem auto 0",padding:"0 1.5rem",display:"grid",gridTemplateColumns:"240px 1fr",gap:"1.4rem",alignItems:"flex-start"}}>
+            <div className="profile-main-wrap profile-main-grid" style={{maxWidth:1100,margin:"-3rem auto 0",padding:"0 1.5rem"}}>
 
                 {/* LEFT column */}
                 <div>

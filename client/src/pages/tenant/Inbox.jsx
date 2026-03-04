@@ -108,6 +108,7 @@ const Inbox = ({ user }) => {
     /* ── Open a thread ── */
     const openThread = async t => {
         setSelected(t);
+        setMobileView("chat");
         setMessages([]);
         setOtherProfile(null);
         setShowReport(false);
@@ -115,7 +116,6 @@ const Inbox = ({ user }) => {
         await loadMessages(t);
         await loadInbox(true);
         inputRef.current?.focus();
-        /* load public profile */
         publicProfileAPI(t.otherId).then(r=>setOtherProfile(r.data.data)).catch(()=>{});
     };
 
@@ -152,11 +152,23 @@ const Inbox = ({ user }) => {
         : threads;
     const canReport = otherProfile && otherProfile.role !== user?.role;
 
+    const [mobileView, setMobileView] = useState("list"); // "list" | "chat"
+
     return (
         <div style={{display:"flex",height:"calc(100vh - 62px)",overflow:"hidden",background:"#f0f2f5",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"}}>
+            <style>{`
+                @media(max-width:640px){
+                    .inbox-sidebar{ width:100%!important; min-width:0!important; display:flex!important; flex-direction:column; }
+                    .inbox-sidebar.mobile-hidden{ display:none!important; }
+                    .inbox-chat{ display:flex!important; flex-direction:column; width:100%; }
+                    .inbox-chat.mobile-hidden{ display:none!important; }
+                    .inbox-back-btn{ display:block!important; }
+                }
+            `}</style>
 
             {/* ══ COL 1: SIDEBAR ══ */}
-            <div style={{width:300,minWidth:260,background:"#fff",borderRight:"1px solid #e8eaed",
+            <div className={`inbox-sidebar${selected && mobileView==="chat" ? " mobile-hidden" : ""}`}
+                style={{width:300,minWidth:260,background:"#fff",borderRight:"1px solid #e8eaed",
                 display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
                 {/* Sidebar header */}
@@ -250,7 +262,8 @@ const Inbox = ({ user }) => {
             </div>
 
             {/* ══ COL 2: CHAT ══ */}
-            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#f5f6fa"}}>
+            <div className={`inbox-chat${mobileView==="list" ? " mobile-hidden" : ""}`}
+                style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#f5f6fa"}}>
                 {!selected ? (
                     <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",
                         justifyContent:"center",gap:"0.75rem",color:"#ccc"}}>
@@ -265,16 +278,22 @@ const Inbox = ({ user }) => {
                 ) : (
                     <>
                         {/* Chat header */}
-                        <div style={{padding:"0.8rem 1.2rem",background:"#fff",borderBottom:"1px solid #e8eaed",
+                        <div style={{padding:"0.8rem 1rem",background:"#fff",borderBottom:"1px solid #e8eaed",
                             display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,
                             boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
                             <div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}>
+                                {/* Back button — mobile only */}
+                                <button onClick={()=>setMobileView("list")} className="inbox-back-btn"
+                                    style={{background:"none",border:"none",cursor:"pointer",padding:"0.25rem 0.4rem 0.25rem 0",
+                                        color:"#888",fontSize:"1.1rem",lineHeight:1,display:"none",textTransform:"none",letterSpacing:0}}>
+                                    ‹
+                                </button>
                                 <Avatar name={selected.otherUser?.name} size={40} online/>
                                 <div>
                                     <div style={{fontWeight:700,fontSize:"0.95rem",color:"#1a1a2e",lineHeight:1.2}}>
                                         {selected.otherUser?.name}
                                     </div>
-                                    <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginTop:"0.15rem"}}>
+                                    <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginTop:"0.15rem",flexWrap:"wrap"}}>
                                         <span style={{background:roleColor(selected.otherUser?.role),color:"#fff",
                                             fontSize:"0.65rem",fontWeight:700,padding:"0.1rem 0.5rem",borderRadius:10}}>
                                             {roleLabel(selected.otherUser?.role)}
@@ -289,7 +308,7 @@ const Inbox = ({ user }) => {
                             </div>
                             {/* Channel badge */}
                             <span style={{background:"#f0f2f5",color:"#888",fontSize:"0.72rem",fontWeight:600,
-                                padding:"0.25rem 0.7rem",borderRadius:6,border:"1px solid #e8eaed"}}>
+                                padding:"0.25rem 0.7rem",borderRadius:6,border:"1px solid #e8eaed",flexShrink:0}}>
                                 {selected.contextType==="property" ? "🏠 Rental Chat" : "🛒 Marketplace Chat"}
                             </span>
                         </div>

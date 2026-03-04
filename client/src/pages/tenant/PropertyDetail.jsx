@@ -240,8 +240,8 @@ const PropertyDetail = ({ user }) => {
 
             {/* ── Breadcrumb ── */}
             <div style={{ background:"#fff", borderBottom:"1px solid #f0ede8",
-                padding:"0.7rem 2rem", fontSize:"0.75rem", color:"#aaa",
-                display:"flex", alignItems:"center", gap:"0.5rem" }}>
+                padding:"0.7rem 1rem", fontSize:"0.75rem", color:"#aaa",
+                display:"flex", alignItems:"center", gap:"0.5rem", flexWrap:"wrap" }}>
                 <span onClick={() => navigate("/")} style={{ cursor:"pointer", color:"#888" }}>Home</span>
                 <span>›</span>
                 <span>{property.area}</span>
@@ -249,8 +249,8 @@ const PropertyDetail = ({ user }) => {
                 <span style={{ color:"#111" }}>{property.propertyType}</span>
             </div>
 
-            <div style={{ maxWidth:1120, margin:"0 auto", padding:"2rem 1.5rem" }}>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 340px", gap:"2.5rem", alignItems:"flex-start" }}>
+            <div style={{ maxWidth:1120, margin:"0 auto", padding:"2rem 1rem" }}>
+                <div className="property-detail-grid" style={{ display:"grid", gridTemplateColumns:"1fr 340px", gap:"2.5rem", alignItems:"flex-start" }}>
 
                     {/* ────── LEFT ────── */}
                     <div>
@@ -683,6 +683,10 @@ const PropertyDetail = ({ user }) => {
 
             <style>{`
                 @keyframes spin { to { transform: rotate(360deg); } }
+                @media (max-width: 768px) {
+                    .property-detail-grid { grid-template-columns: 1fr !important; gap: 1.5rem !important; }
+                    .property-detail-grid > div:last-child { position: static !important; }
+                }
             `}</style>
         </div>
     );

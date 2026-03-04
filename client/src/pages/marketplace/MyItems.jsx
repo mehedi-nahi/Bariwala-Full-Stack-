@@ -104,11 +104,15 @@ const MyItems = () => {
 
     return (
         <div style={{ background: "#f5f6fa", minHeight: "100vh", paddingBottom: "4rem" }}>
+            <style>{`
+                .my-items-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+                .my-items-row { min-width: 560px; }
+            `}</style>
 
             {/* ── Header ── */}
             <div style={{ background: "#1a1a2e", borderBottom: "3px solid #e94560" }}>
                 <div style={{
-                    maxWidth: 1100, margin: "0 auto", padding: "1.6rem 2rem",
+                    maxWidth: 1100, margin: "0 auto", padding: "1.4rem 1rem",
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                     flexWrap: "wrap", gap: "1rem",
                 }}>
@@ -140,7 +144,7 @@ const MyItems = () => {
                 </div>
             </div>
 
-            <div style={{ maxWidth: 1100, margin: "2rem auto", padding: "0 2rem" }}>
+            <div style={{ maxWidth: 1100, margin: "2rem auto", padding: "0 1rem" }}>
 
                 {/* Alert */}
                 {msg.text && (
@@ -180,8 +184,9 @@ const MyItems = () => {
                             <span style={{ fontWeight: 800, fontSize: "0.78rem", color: "#1a1a2e", textTransform:"uppercase", letterSpacing:"0.06em" }}>🟢 Active Listings</span>
                             <span style={{ fontSize:"0.72rem", color:"#888" }}>({activeItems.length})</span>
                         </div>
+                        <div className="my-items-table-wrap">
                         {/* Table header */}
-                        <div style={{
+                        <div className="my-items-row" style={{
                             display: "grid", gridTemplateColumns: "56px 1fr 120px 120px 160px",
                             padding: "0.6rem 1rem", background: "#f8f9fa", borderBottom: "1px solid #eee",
                             fontSize: "0.7rem", fontWeight: 700, color: "#888",
@@ -233,7 +238,7 @@ const MyItems = () => {
                                             </form>
                                         </div>
                                     ) : (
-                                        <div style={{ display: "grid", gridTemplateColumns: "56px 1fr 120px 120px 160px", padding: "0.85rem 1rem", borderBottom: isLast ? "none" : "1px solid #f5f5f5", alignItems: "center", transition: "background 0.12s" }}
+                                        <div className="my-items-row" style={{ display: "grid", gridTemplateColumns: "56px 1fr 120px 120px 160px", padding: "0.85rem 1rem", borderBottom: isLast ? "none" : "1px solid #f5f5f5", alignItems: "center", transition: "background 0.12s" }}
                                             onMouseEnter={e => e.currentTarget.style.background = "#fafafa"}
                                             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                                             <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", background: "#f5f5f5", flexShrink: 0 }}>
@@ -256,6 +261,7 @@ const MyItems = () => {
                                 </div>
                             );
                         })}
+                        </div>{/* end scroll wrap */}
                     </div>
                 )}
 
@@ -266,11 +272,12 @@ const MyItems = () => {
                             <span style={{ fontWeight: 800, fontSize: "0.78rem", color: "#1a1a2e", textTransform:"uppercase", letterSpacing:"0.06em" }}>✅ Sold Items</span>
                             <span style={{ fontSize:"0.72rem", color:"#888" }}>({soldItems.length})</span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "56px 1fr 120px 160px 200px", padding: "0.6rem 1rem", background: "#f8f9fa", borderBottom: "1px solid #eee", fontSize: "0.7rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        <div className="my-items-table-wrap">
+                        <div className="my-items-row" style={{ display: "grid", gridTemplateColumns: "56px 1fr 120px 160px 200px", padding: "0.6rem 1rem", background: "#f8f9fa", borderBottom: "1px solid #eee", fontSize: "0.7rem", fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                             <div /><div>Item</div><div>Price</div><div>Sold On</div><div>Buyer Info</div>
                         </div>
                         {soldItems.map((item, idx) => (
-                            <div key={item._id} style={{ display: "grid", gridTemplateColumns: "56px 1fr 120px 160px 200px", padding: "0.85rem 1rem", borderBottom: idx < soldItems.length - 1 ? "1px solid #f5f5f5" : "none", alignItems: "center", background:"#f9fffe" }}>
+                            <div key={item._id} className="my-items-row" style={{ display: "grid", gridTemplateColumns: "56px 1fr 120px 160px 200px", padding: "0.85rem 1rem", borderBottom: idx < soldItems.length - 1 ? "1px solid #f5f5f5" : "none", alignItems: "center", background:"#f9fffe" }}>
                                 <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", background: "#f5f5f5", flexShrink: 0 }}>
                                     {item.images?.[0] ? <img src={API_BASE + item.images[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
                                         : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#ccc" }}><IC d={D.package} size={18} /></div>}
@@ -294,6 +301,7 @@ const MyItems = () => {
                                 </div>
                             </div>
                         ))}
+                        </div>{/* end scroll wrap */}
                     </div>
                 )}
             </div>

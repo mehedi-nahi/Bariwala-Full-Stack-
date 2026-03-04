@@ -390,7 +390,7 @@ const MyProperties = () => {
 
             {/* ── Header ── */}
             <div style={{background:"#111",borderBottom:"1px solid #222"}}>
-                <div style={{maxWidth:1120,margin:"0 auto",padding:"1.4rem 2rem",
+                <div style={{maxWidth:1120,margin:"0 auto",padding:"1.4rem 1rem",
                     display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"1rem"}}>
                     <div>
                         <div style={{display:"flex",alignItems:"center",gap:"0.5rem",fontSize:"0.72rem",color:"#666",marginBottom:"0.3rem",textTransform:"uppercase",letterSpacing:"0.06em"}}>
@@ -421,7 +421,7 @@ const MyProperties = () => {
                 </div>
             </div>
 
-            <div style={{maxWidth:1120,margin:"2rem auto",padding:"0 2rem"}}>
+            <div style={{maxWidth:1120,margin:"2rem auto",padding:"0 1rem"}}>
 
                 {/* Alert */}
                 {msg.text && (
@@ -454,7 +454,8 @@ const MyProperties = () => {
 
                 {/* Property list */}
                 {sortedProperties.length > 0 && (
-                    <div style={{display:"flex",flexDirection:"column",gap:1,border:"1px solid #e8e4dc",background:"#e8e4dc"}}>
+                    <div className="properties-table-wrap" style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+                    <div style={{display:"flex",flexDirection:"column",gap:1,border:"1px solid #e8e4dc",background:"#e8e4dc",minWidth:700}}>
 
                         {/* Column header */}
                         <div style={{
@@ -503,6 +504,7 @@ const MyProperties = () => {
 
                         {/* Properties WITHOUT requests */}
                         {withoutRequests.map(p => renderRow(p))}
+                    </div>
                     </div>
                 )}
             </div>

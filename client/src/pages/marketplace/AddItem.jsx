@@ -56,22 +56,31 @@ const AddItem = () => {
 
     return (
         <div style={{background:"#f5f6fa",minHeight:"100vh",paddingBottom:"3rem"}}>
+            <style>{`
+                .add-item-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+                .add-item-actions{display:flex;gap:1rem;justify-content:flex-end;margin-top:0.5rem;flex-wrap:wrap}
+                @media(max-width:600px){
+                    .add-item-grid{grid-template-columns:1fr!important}
+                    .add-item-actions{flex-direction:column!important}
+                    .add-item-actions a,.add-item-actions button{width:100%!important;text-align:center!important}
+                }
+            `}</style>
             {/* Header */}
-            <div style={{background:"linear-gradient(135deg,#1a1a2e 60%,#e94560)",padding:"2rem 2rem 3rem",color:"#fff"}}>
+            <div style={{background:"linear-gradient(135deg,#1a1a2e 60%,#e94560)",padding:"1.5rem 1rem 3rem",color:"#fff"}}>
                 <div style={{maxWidth:820,margin:"0 auto"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"0.6rem",fontSize:"0.82rem",color:"#aaa",marginBottom:"0.8rem"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"0.6rem",fontSize:"0.82rem",color:"#aaa",marginBottom:"0.8rem",flexWrap:"wrap"}}>
                         <Link to="/marketplace/items" style={{color:"#e94560",textDecoration:"none"}}>Home</Link>
                         <span>›</span>
                         <Link to="/marketplace/my-items" style={{color:"#aaa",textDecoration:"none"}}>My Items</Link>
                         <span>›</span>
                         <span style={{color:"#fff"}}>Sell Item</span>
                     </div>
-                    <h1 style={{fontSize:"1.7rem",fontWeight:800,margin:0}}>List an Item for Sale</h1>
-                    <p style={{opacity:0.75,marginTop:"0.3rem",fontSize:"0.9rem"}}>Fill in the details below to list your item on the marketplace.</p>
+                    <h1 style={{fontSize:"1.5rem",fontWeight:800,margin:0}}>List an Item for Sale</h1>
+                    <p style={{opacity:0.75,marginTop:"0.3rem",fontSize:"0.88rem"}}>Fill in the details below to list your item on the marketplace.</p>
                 </div>
             </div>
 
-            <div style={{maxWidth:820,margin:"-1.5rem auto 0",padding:"0 1.5rem"}}>
+            <div style={{maxWidth:820,margin:"-1.5rem auto 0",padding:"0 1rem"}}>
                 {error && (
                     <div style={{background:"#fdecea",border:"1px solid #e74c3c",color:"#c0392b",borderRadius:10,padding:"0.8rem 1.2rem",marginBottom:"1.2rem",fontWeight:600,fontSize:"0.88rem"}}>
                         ❌ {error}
@@ -81,7 +90,7 @@ const AddItem = () => {
                 <form onSubmit={handleSubmit}>
                     {/* Basic Info */}
                     <SectionCard icon="🏷️" title="Item Details">
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                        <div className="add-item-grid">
                             <Field label="Item Title" required>
                                 <input name="title" value={form.title} onChange={handleChange}
                                     placeholder="e.g. Wooden Dining Table" style={inp} required
@@ -106,7 +115,7 @@ const AddItem = () => {
 
                     {/* Pricing */}
                     <SectionCard icon="💰" title="Pricing">
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                        <div className="add-item-grid">
                             <Field label="Asking Price (BDT)" required>
                                 <div style={{position:"relative"}}>
                                     <span style={{position:"absolute",left:"0.75rem",top:"50%",transform:"translateY(-50%)",color:"#888",fontWeight:700,fontSize:"0.9rem"}}>৳</span>
@@ -152,7 +161,7 @@ const AddItem = () => {
                     </SectionCard>
 
                     {/* Submit */}
-                    <div style={{display:"flex",gap:"1rem",justifyContent:"flex-end",marginTop:"0.5rem"}}>
+                    <div className="add-item-actions">
                         <Link to="/marketplace/my-items"
                             style={{padding:"0.8rem 1.8rem",borderRadius:10,border:"1px solid #e0e0e0",
                                 color:"#666",textDecoration:"none",fontWeight:600,fontSize:"0.9rem",

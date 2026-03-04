@@ -90,16 +90,23 @@ const ItemDetail = ({ user }) => {
 
     return (
         <div style={{background:"#f5f6fa",minHeight:"100vh",paddingBottom:"3rem"}}>
+            <style>{`
+                .item-detail-grid{display:grid;grid-template-columns:1fr 340px;gap:1.8rem;align-items:flex-start}
+                @media(max-width:768px){
+                    .item-detail-grid{grid-template-columns:1fr!important}
+                    .item-detail-grid>div:last-child{position:static!important}
+                }
+            `}</style>
 
             {/* ── BREADCRUMB ── */}
-            <div style={{background:"#1a1a2e",padding:"0.8rem 2rem",display:"flex",alignItems:"center",gap:"0.5rem",fontSize:"0.82rem",color:"#aaa"}}>
+            <div style={{background:"#1a1a2e",padding:"0.8rem 1rem",display:"flex",alignItems:"center",gap:"0.5rem",fontSize:"0.82rem",color:"#aaa",flexWrap:"wrap"}}>
                 <span onClick={()=>navigate("/marketplace/items")} style={{cursor:"pointer",color:"#e94560"}}>Marketplace</span>
                 <span>›</span>
                 <span style={{color:"#fff"}}>{item.title}</span>
             </div>
 
-            <div style={{maxWidth:1100,margin:"0 auto",padding:"2rem 1.5rem"}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:"1.8rem",alignItems:"flex-start"}}>
+            <div style={{maxWidth:1100,margin:"0 auto",padding:"2rem 1rem"}}>
+                <div className="item-detail-grid">
 
                     {/* ── LEFT ── */}
                     <div>

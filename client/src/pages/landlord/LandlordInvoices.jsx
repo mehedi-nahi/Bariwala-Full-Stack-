@@ -224,6 +224,10 @@ const LandlordInvoices = () => {
 
     return (
         <div className="container">
+            <style>{`
+                .invoice-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.8rem}
+                @media(max-width:600px){ .invoice-detail-grid{grid-template-columns:1fr!important} }
+            `}</style>
             <h2 style={{ marginBottom:"1.5rem", letterSpacing:"-0.02em" }}>Invoice Management</h2>
 
             {/* ── Summary ── */}
@@ -305,7 +309,7 @@ const LandlordInvoices = () => {
                     {form.tenantId && (
                         <>
                             <label style={{ marginTop:"0.5rem" }}>Step 3 — Invoice Details</label>
-                            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.8rem" }}>
+                            <div className="invoice-detail-grid">
                                 <div>
                                     <label style={{ fontSize:"0.75rem", color:"#888" }}>For Month *</label>
                                     <select name="forMonth" value={form.forMonth} onChange={handleChange} required>

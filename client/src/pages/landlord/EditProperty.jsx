@@ -90,21 +90,30 @@ const EditProperty = () => {
 
     return (
         <div style={{background:"#f5f6fa",minHeight:"100vh",paddingBottom:"3rem"}}>
+            <style>{`
+                @keyframes spin{to{transform:rotate(360deg)}}
+                .edit-prop-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+                .edit-prop-grid-3{display:grid;grid-template-columns:1fr 1fr 2fr;gap:1rem}
+                @media(max-width:600px){
+                    .edit-prop-grid-2{grid-template-columns:1fr!important}
+                    .edit-prop-grid-3{grid-template-columns:1fr!important}
+                    .edit-prop-actions{flex-direction:column!important}
+                    .edit-prop-actions a,.edit-prop-actions button{width:100%!important;text-align:center!important}
+                }
+            `}</style>
             {/* Header */}
-            <div style={{background:"linear-gradient(135deg,#1a1a2e 60%,#e94560)",padding:"2rem 2rem 3rem",color:"#fff"}}>
+            <div style={{background:"linear-gradient(135deg,#1a1a2e 60%,#e94560)",padding:"1.5rem 1rem 3rem",color:"#fff"}}>
                 <div style={{maxWidth:820,margin:"0 auto"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"0.6rem",fontSize:"0.82rem",color:"#aaa",marginBottom:"0.8rem"}}>
-                        <Link to="/landlord/dashboard" style={{color:"#e94560",textDecoration:"none"}}>Home</Link>
-                        <span>›</span>
-                        <Link to="/landlord/properties" style={{color:"#aaa",textDecoration:"none"}}>My Properties</Link>
+                    <div style={{display:"flex",alignItems:"center",gap:"0.6rem",fontSize:"0.82rem",color:"#aaa",marginBottom:"0.8rem",flexWrap:"wrap"}}>
+                        <Link to="/landlord/properties" style={{color:"#e94560",textDecoration:"none"}}>My Properties</Link>
                         <span>›</span><span style={{color:"#fff"}}>Edit Property</span>
                     </div>
-                    <h1 style={{fontSize:"1.7rem",fontWeight:800,margin:0}}>Edit Property</h1>
-                    <p style={{opacity:0.75,marginTop:"0.3rem",fontSize:"0.9rem"}}>Update your rental listing details below.</p>
+                    <h1 style={{fontSize:"1.5rem",fontWeight:800,margin:0}}>Edit Property</h1>
+                    <p style={{opacity:0.75,marginTop:"0.3rem",fontSize:"0.88rem"}}>Update your rental listing details below.</p>
                 </div>
             </div>
 
-            <div style={{maxWidth:820,margin:"-1.5rem auto 0",padding:"0 1.5rem"}}>
+            <div style={{maxWidth:820,margin:"-1.5rem auto 0",padding:"0 1rem"}}>
                 {error && (
                     <div style={{background:"#fdecea",border:"1px solid #e74c3c",color:"#c0392b",borderRadius:10,padding:"0.8rem 1.2rem",marginBottom:"1.2rem",fontWeight:600,fontSize:"0.88rem"}}>
                         ❌ {error}
@@ -114,7 +123,7 @@ const EditProperty = () => {
                 <form onSubmit={handleSubmit}>
                     {/* Basic Info */}
                     <SectionCard icon="🏠" title="Basic Information">
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                        <div className="edit-prop-grid-2">
                             <Field label="Property Type" required>
                                 <select name="propertyType" value={form.propertyType} onChange={handleChange} style={inputStyle}>
                                     <option value="Flat">Flat</option>
@@ -139,7 +148,7 @@ const EditProperty = () => {
 
                     {/* Location */}
                     <SectionCard icon="📍" title="Location Details">
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1rem"}}>
+                        <div className="edit-prop-grid-2">
                             <Field label="Area" required>
                                 <input name="area" value={form.area} onChange={handleChange} required style={inputStyle} />
                             </Field>
@@ -150,7 +159,7 @@ const EditProperty = () => {
                         <Field label="Full Address" required>
                             <input name="address" value={form.address} onChange={handleChange} required style={inputStyle} />
                         </Field>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:"1rem"}}>
+                        <div className="edit-prop-grid-3">
                             <Field label="Latitude">
                                 <input name="lat" type="number" step="any" value={form.location?.lat||""} onChange={handleLocation} style={inputStyle} />
                             </Field>
@@ -187,13 +196,12 @@ const EditProperty = () => {
 
                     {/* Images */}
                     <SectionCard icon="📷" title="Property Images">
-                        {/* Existing */}
                         {existing.length > 0 && preview.length === 0 && (
                             <div style={{marginBottom:"1rem"}}>
                                 <p style={{fontSize:"0.82rem",color:"#888",fontWeight:600,marginBottom:"0.5rem"}}>CURRENT IMAGES</p>
                                 <div style={{display:"flex",gap:"0.6rem",flexWrap:"wrap"}}>
                                     {existing.map((img,i) => (
-                                        <img key={i} src={API_BASE+img} alt="" style={{width:90,height:70,objectFit:"cover",borderRadius:8,border:"2px solid #eee"}} onError={e=>e.target.style.display="none"} />
+                                        <img key={i} src={API_BASE+img} alt="" style={{width:80,height:64,objectFit:"cover",borderRadius:8,border:"2px solid #eee"}} onError={e=>e.target.style.display="none"} />
                                     ))}
                                 </div>
                             </div>
@@ -212,7 +220,7 @@ const EditProperty = () => {
                             <div style={{display:"flex",gap:"0.6rem",flexWrap:"wrap",marginTop:"0.8rem"}}>
                                 {preview.map((src,i) => (
                                     <div key={i} style={{position:"relative"}}>
-                                        <img src={src} alt="" style={{width:90,height:70,objectFit:"cover",borderRadius:8,border:"2px solid #e94560"}} />
+                                        <img src={src} alt="" style={{width:80,height:64,objectFit:"cover",borderRadius:8,border:"2px solid #e94560"}} />
                                         <span style={{position:"absolute",top:3,right:3,background:"#e94560",color:"#fff",fontSize:"0.6rem",padding:"0.1rem 0.35rem",borderRadius:4}}>New</span>
                                     </div>
                                 ))}
@@ -221,7 +229,7 @@ const EditProperty = () => {
                     </SectionCard>
 
                     {/* Submit */}
-                    <div style={{display:"flex",gap:"0.8rem",justifyContent:"flex-end"}}>
+                    <div className="edit-prop-actions" style={{display:"flex",gap:"0.8rem",justifyContent:"flex-end",flexWrap:"wrap"}}>
                         <Link to="/landlord/properties" style={{
                             background:"#f5f5f5",color:"#555",textDecoration:"none",
                             padding:"0.75rem 1.8rem",borderRadius:10,fontWeight:600,fontSize:"0.92rem"
@@ -237,7 +245,6 @@ const EditProperty = () => {
                             {loading ? <><span style={{display:"inline-block",width:14,height:14,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite"}} />Updating...</> : "✏️ Update Property"}
                         </button>
                     </div>
-                    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                 </form>
             </div>
         </div>
