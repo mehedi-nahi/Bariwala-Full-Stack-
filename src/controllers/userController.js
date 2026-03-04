@@ -41,7 +41,7 @@ exports.login = async (req, res) => {
         let isProduction = process.env.NODE_ENV === "production";
 
         res.cookie("token", token, {
-            maxAge:   parseInt(process.env.COOKIE_EXPIRE) * 24 * 60 * 60 * 1000,
+            maxAge:   (parseInt(process.env.COOKIE_EXPIRE) || 7) * 24 * 60 * 60 * 1000,
             httpOnly: true,
             sameSite: isProduction ? "none" : "lax",
             secure:   isProduction
