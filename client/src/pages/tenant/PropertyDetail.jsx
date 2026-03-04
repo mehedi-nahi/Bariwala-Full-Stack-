@@ -4,7 +4,7 @@ import { singlePropertyAPI } from "../../api/propertyAPI";
 import { sendMessageAPI } from "../../api/messageAPI";
 import { createReportAPI } from "../../api/reportAPI";
 import { createReviewAPI, userReviewsAPI } from "../../api/reviewAPI";
-import { sendRentalRequestAPI, rentalRequestStatusAPI } from "../../api/rentalRequestAPI";
+import { sendRentalRequestAPI, rentalRequestStatusAPI, incomingRentalRequestsAPI } from "../../api/rentalRequestAPI";
 import LoginPromptModal from "../../components/LoginPromptModal";
 
 const API_BASE = "";
@@ -171,10 +171,15 @@ const PropertyDetail = ({ user }) => {
     const [review,    setReview]    = useState({ rating:5, comment:"", targetId:"" });
     const [reviewMsg, setReviewMsg] = useState("");
     const [reportMsg, setReportMsg] = useState("");
-    const [tab,       setTab]       = useState("details"); // details | contact | reviews
+    const [tab,       setTab]       = useState("details"); // details | contact | message-tenant | reviews
     const [rentRequest,    setRentRequest]    = useState(null);
     const [showRentModal,  setShowRentModal]  = useState(false);
     const [loginModal,     setLoginModal]     = useState(false);
+    // landlord → message tenant
+    const [propertyTenants,  setPropertyTenants]  = useState([]); // tenants who requested this property
+    const [selectedTenant,   setSelectedTenant]   = useState(null);
+    const [landlordMsg,      setLandlordMsg]      = useState("");
+    const [landlordMsgSent,  setLandlordMsgSent]  = useState("");
 
     useEffect(() => {
         singlePropertyAPI(id).then(res => {
@@ -185,6 +190,11 @@ const PropertyDetail = ({ user }) => {
         });
         if (user?.role === "tenant")
             rentalRequestStatusAPI(id).then(r => setRentRequest(r.data.data)).catch(() => {});
+        if (user?.role === "landlord")
+            incomingRentalRequestsAPI().then(r => {
+                const requests = (r.data.data || []).filter(req => String(req.property) === String(id));
+                setPropertyTenants(requests);
+            }).catch(() => {});
     }, [id]); // eslint-disable-line
 
     const handleMessage = async () => {
@@ -193,6 +203,16 @@ const PropertyDetail = ({ user }) => {
             await sendMessageAPI({ propertyId: id, receiverId: property.landlordInfo[0]._id, message: msg });
             setMsgSent("✅ Message sent! Check your inbox."); setMsg("");
         } catch { setMsgSent("❌ Failed to send message."); }
+    };
+
+    const handleLandlordMessage = async () => {
+        if (!landlordMsg.trim() || !selectedTenant) return;
+        setLandlordMsgSent("");
+        try {
+            await sendMessageAPI({ propertyId: id, receiverId: selectedTenant._id, message: landlordMsg });
+            setLandlordMsgSent("✅ Message sent to tenant!");
+            setLandlordMsg("");
+        } catch { setLandlordMsgSent("❌ Failed to send message."); }
     };
 
     const handleReport = async (type) => {
@@ -232,9 +252,10 @@ const PropertyDetail = ({ user }) => {
     const avgRating = reviews.length ? (reviews.reduce((s,r) => s+r.rating, 0) / reviews.length).toFixed(1) : null;
 
     const TABS = [
-        { id:"details",  label:"Details" },
-        { id:"contact",  label:"Contact Landlord" },
-        { id:"reviews",  label:`Reviews (${reviews.length})` },
+        { id:"details",        label:"Details" },
+        { id:"contact",        label:"Contact Landlord" },
+        ...(isLandlord ? [{ id:"message-tenant", label:"Message Tenant" }] : []),
+        { id:"reviews",        label:`Reviews (${reviews.length})` },
     ];
 
     return (
@@ -335,7 +356,7 @@ const PropertyDetail = ({ user }) => {
                         </div>
 
                         {/* ── Tab nav ── */}
-                        <div style={{ display:"flex", borderBottom:"1px solid #e8e4dc", marginBottom:"1.8rem" }}>
+                        <div style={{ display:"flex", borderBottom:"1px solid #e8e4dc", marginBottom:"1.8rem", flexWrap:"wrap" }}>
                             {TABS.map(t => (
                                 <button key={t.id} onClick={() => {
                                     if (t.id === "contact" && !isTenant) { setLoginModal(true); return; }
@@ -345,7 +366,7 @@ const PropertyDetail = ({ user }) => {
                                     padding:"0.65rem 1rem", cursor:"pointer", fontSize:"0.78rem",
                                     fontWeight: tab===t.id ? 700 : 500, color: tab===t.id ? "#111" : "#888",
                                     marginBottom:"-1px", textTransform:"uppercase", letterSpacing:"0.06em",
-                                    transition:"color 0.15s"
+                                    transition:"color 0.15s", whiteSpace:"nowrap"
                                 }}>{t.label}</button>
                             ))}
                         </div>
@@ -486,9 +507,123 @@ const PropertyDetail = ({ user }) => {
                             </div>
                         )}
 
-                        {/* ── REVIEWS TAB ── */}
-                        {tab === "reviews" && (
+                        {/* ── MESSAGE TENANT TAB (landlord only) ── */}
+                        {tab === "message-tenant" && isLandlord && (
                             <div>
+                                {propertyTenants.length === 0 ? (
+                                    <div style={{ background:"#fff", border:"1px solid #e8e4dc",
+                                        padding:"2.5rem", textAlign:"center" }}>
+                                        <div style={{ fontSize:"2.5rem", marginBottom:"0.6rem" }}>📭</div>
+                                        <h3 style={{ fontWeight:700, color:"#111", marginBottom:"0.4rem", fontSize:"1rem" }}>No tenants yet</h3>
+                                        <p style={{ fontSize:"0.85rem", color:"#aaa" }}>
+                                            Tenants who send a rental request for this property will appear here.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="tenant-msg-grid" style={{ display:"grid", gridTemplateColumns:"220px 1fr", gap:"1.2rem", alignItems:"flex-start" }}>
+
+                                        {/* Tenant list */}
+                                        <div style={{ background:"#fff", border:"1px solid #e8e4dc" }}>
+                                            <div style={{ padding:"0.65rem 1rem", borderBottom:"1px solid #f0ede8",
+                                                fontSize:"0.68rem", fontWeight:700, textTransform:"uppercase",
+                                                letterSpacing:"0.08em", color:"#888" }}>
+                                                Tenants ({propertyTenants.length})
+                                            </div>
+                                            {propertyTenants.map(req => {
+                                                const t = req.tenantInfo?.[0];
+                                                if (!t) return null;
+                                                const isSelected = selectedTenant?._id === t._id;
+                                                return (
+                                                    <div key={req._id}
+                                                        onClick={() => { setSelectedTenant(t); setLandlordMsgSent(""); setLandlordMsg(""); }}
+                                                        style={{ display:"flex", alignItems:"center", gap:"0.65rem",
+                                                            padding:"0.75rem 1rem", cursor:"pointer",
+                                                            background: isSelected ? "#fafaf8" : "#fff",
+                                                            borderLeft: isSelected ? "3px solid #111" : "3px solid transparent",
+                                                            borderBottom:"1px solid #f5f5f5",
+                                                            transition:"all 0.12s" }}>
+                                                        <Avatar name={t.name} size={34} />
+                                                        <div style={{ minWidth:0 }}>
+                                                            <div style={{ fontWeight:700, fontSize:"0.82rem", color:"#111",
+                                                                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                                                                {t.name}
+                                                            </div>
+                                                            <div style={{ fontSize:"0.68rem", color:"#aaa", marginTop:1 }}>
+                                                                {t.email}
+                                                            </div>
+                                                            <span style={{
+                                                                display:"inline-block", marginTop:3,
+                                                                fontSize:"0.62rem", fontWeight:700,
+                                                                padding:"0.1rem 0.45rem",
+                                                                borderRadius:2,
+                                                                background: req.status==="Accepted"?"#f0f8f0":req.status==="Rejected"?"#fdf0f0":"#fffbf0",
+                                                                color: req.status==="Accepted"?"#2e7d32":req.status==="Rejected"?"#c0392b":"#8a6914",
+                                                            }}>{req.status}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Message panel */}
+                                        <div>
+                                            {!selectedTenant ? (
+                                                <div style={{ background:"#fff", border:"1px solid #e8e4dc",
+                                                    padding:"2.5rem", textAlign:"center", color:"#aaa", fontSize:"0.85rem" }}>
+                                                    ← Select a tenant to message
+                                                </div>
+                                            ) : (
+                                                <div style={{ background:"#fff", border:"1px solid #e8e4dc", padding:"1.4rem" }}>
+                                                    {/* Selected tenant header */}
+                                                    <div style={{ display:"flex", alignItems:"center", gap:"0.75rem",
+                                                        marginBottom:"1rem", paddingBottom:"0.9rem",
+                                                        borderBottom:"1px solid #f0ede8" }}>
+                                                        <Avatar name={selectedTenant.name} size={38} />
+                                                        <div>
+                                                            <div style={{ fontWeight:700, color:"#111", fontSize:"0.9rem" }}>
+                                                                {selectedTenant.name}
+                                                            </div>
+                                                            <div style={{ fontSize:"0.74rem", color:"#aaa" }}>
+                                                                {selectedTenant.email}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <h3 style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase",
+                                                        letterSpacing:"0.08em", color:"#888", marginBottom:"0.7rem" }}>
+                                                        Send Message
+                                                    </h3>
+                                                    <textarea
+                                                        value={landlordMsg}
+                                                        onChange={e => setLandlordMsg(e.target.value)}
+                                                        placeholder={`Hi ${selectedTenant.name.split(" ")[0]}, regarding your rental request…`}
+                                                        style={{ width:"100%", minHeight:110, padding:"0.7rem 0.9rem",
+                                                            border:"1px solid #e0ddd8", borderRadius:2, fontSize:"0.88rem",
+                                                            resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }}
+                                                    />
+                                                    <button onClick={handleLandlordMessage}
+                                                        disabled={!landlordMsg.trim()}
+                                                        style={{ marginTop:"0.7rem", background:"#111", color:"#fff",
+                                                            padding:"0.65rem 1.6rem", fontSize:"0.78rem",
+                                                            textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700,
+                                                            opacity: landlordMsg.trim() ? 1 : 0.5, cursor: landlordMsg.trim() ? "pointer" : "not-allowed" }}>
+                                                        Send Message
+                                                    </button>
+                                                    {landlordMsgSent && (
+                                                        <p style={{ marginTop:"0.6rem", fontSize:"0.82rem",
+                                                            color: landlordMsgSent.startsWith("✅") ? "#2e7d32" : "#c0392b" }}>
+                                                            {landlordMsgSent}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── REVIEWS TAB ── */}
+                        {tab === "reviews" && (                            <div>
                                 {/* avg rating */}
                                 {avgRating && (
                                     <div style={{ display:"flex", alignItems:"center", gap:"1rem",
@@ -647,6 +782,15 @@ const PropertyDetail = ({ user }) => {
                                     🔒 Login to Rent
                                 </button>
                             )}
+                            {/* Landlord quick-message button */}
+                            {isLandlord && (
+                                <button onClick={() => setTab("message-tenant")} style={{
+                                    marginTop:"0.6rem", width:"100%", background:"#fff", color:"#111",
+                                    border:"1px solid #111", padding:"0.7rem", fontSize:"0.78rem",
+                                    textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, cursor:"pointer" }}>
+                                    ✉️ Message Tenant
+                                </button>
+                            )}
                             <button onClick={() => navigate(-1)} style={{
                                 marginTop:8, width:"100%", background:"none",
                                 border:"1px solid #e8e4dc", color:"#888",
@@ -712,6 +856,7 @@ const PropertyDetail = ({ user }) => {
                 @media (max-width: 768px) {
                     .property-detail-grid { grid-template-columns: 1fr !important; gap: 1.5rem !important; }
                     .property-detail-grid > div:last-child { position: static !important; }
+                    .tenant-msg-grid { grid-template-columns: 1fr !important; }
                 }
             `}</style>
         </div>
