@@ -65,7 +65,7 @@ const CartSidebar = ({ cart, onRemove, onCheckout, onClose }) => {
                             background:"#fff",border:"1px solid #eee",borderRadius:10,marginBottom:"0.5rem",
                             alignItems:"center",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
                             {item.images?.[0]
-                                ? <img src={`/api/v1/get-file/${item.images[0]}`} alt=""
+                                ? <img src={item.images[0]} alt=""
                                     style={{width:56,height:56,borderRadius:8,objectFit:"cover",flexShrink:0}}/>
                                 : <div style={{width:56,height:56,borderRadius:8,background:"#f0f2ff",
                                     display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.4rem",flexShrink:0}}>📦</div>
@@ -307,7 +307,7 @@ const MarketplaceGateway = ({ cart, onClose, onSuccess }) => {
 /* ══ PRODUCT CARD ════════════════════════════════════════════════ */
 const ProductCard = ({ item, inCart, onAddCart }) => {
     const [hov, setHov] = useState(false);
-    const img = item.images?.[0] ? `/api/v1/get-file/${item.images[0]}` : null;
+    const img = item.images?.[0] ? item.images[0] : null;
     return (
         <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
             style={{background:"#fff",borderRadius:12,overflow:"hidden",cursor:"pointer",
@@ -360,7 +360,7 @@ const DealsPanel = ({ items, cart, onAddCart }) => {
                 <span style={{color:"#e94560",fontSize:"0.68rem",fontWeight:700}}>Save 50%</span>
             </div>
             {deals.map((item,i)=>{
-                const img    = item.images?.[0] ? `/api/v1/get-file/${item.images[0]}` : null;
+                const img    = item.images?.[0] ? item.images[0] : null;
                 const inCart = cart.some(c=>c._id===item._id);
                 return(
                     <div key={item._id} style={{display:"flex",gap:"0.65rem",padding:"0.6rem 0.8rem",alignItems:"center",
@@ -405,7 +405,7 @@ const HeroBanner = ({ items, cart, onAddCart }) => {
         </div>
     );
     const item   = featured[idx];
-    const img    = item.images?.[0] ? `/api/v1/get-file/${item.images[0]}` : null;
+    const img    = item.images?.[0] ? item.images[0] : null;
     const inCart = cart.some(c=>c._id===item._id);
     return(
         <div style={{position:"relative",background:"linear-gradient(135deg,#1a1a2e 55%,#16213e)",overflow:"hidden",minHeight:340}}>

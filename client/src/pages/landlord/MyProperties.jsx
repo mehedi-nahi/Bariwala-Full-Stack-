@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { myPropertiesAPI, deletePropertyAPI, changeAvailabilityAPI } from "../../api/propertyAPI";
 import { incomingRentalRequestsAPI, respondRentalRequestAPI } from "../../api/rentalRequestAPI";
 
-const API_BASE = "/api/v1/get-file/";
+const API_BASE = "";
 
 const IC = ({ d, size=15 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"

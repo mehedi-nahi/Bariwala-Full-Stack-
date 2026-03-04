@@ -6,7 +6,7 @@ import { createReportAPI } from "../../api/reportAPI";
 import { createReviewAPI, userReviewsAPI } from "../../api/reviewAPI";
 import { sendRentalRequestAPI, rentalRequestStatusAPI } from "../../api/rentalRequestAPI";
 
-const API_BASE = "/api/v1/get-file/";
+const API_BASE = "";
 
 /* ── small helpers ── */
 const Stars = ({ n = 0 }) => (

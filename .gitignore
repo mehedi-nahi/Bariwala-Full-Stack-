@@ -18,6 +18,9 @@ uploads/*
 # ─── Demo data folder (seed images + scripts) ─────────
 demo_data/
 
+
+Ex
+
 # ─── Frontend build output ────────────────────────────
 client/dist/
 client/dist-ssr/

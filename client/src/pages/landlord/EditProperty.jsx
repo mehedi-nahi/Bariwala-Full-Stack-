@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { singlePropertyAPI, updatePropertyAPI } from "../../api/propertyAPI";
 
-const API_BASE = "/api/v1/get-file/";
+const API_BASE = "";
 const FACILITIES = ["Gas","Water","Lift","WiFi","Parking","Generator","Security","CCTV","AC","Furnished"];
 
 const SectionCard = ({ icon, title, children }) => (

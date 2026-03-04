@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { myItemsAPI, deleteItemAPI, updateItemAPI } from "../../api/marketplaceAPI";
 
-const API_BASE = "/api/v1/get-file/";
+const API_BASE = "";
 
 const IC = ({ d, size = 15 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"

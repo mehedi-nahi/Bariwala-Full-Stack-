@@ -2,7 +2,6 @@ const mongoose      = require("mongoose");
 const messageModel  = require("../models/messageModel");
 const userModel     = require("../models/userModel");
 
-// Send Message
 exports.sendMessage = async (req, res) => {
     try {
         let senderId   = req.headers._id;
@@ -10,17 +9,12 @@ exports.sendMessage = async (req, res) => {
         let { propertyId, itemId, receiverId, message } = req.body;
 
         const allowedRoles = ["tenant", "landlord", "marketplace", "admin"];
-        if (!allowedRoles.includes(senderRole)) {
+        if (!allowedRoles.includes(senderRole))
             return res.status(403).json({ success: false, message: "You are not allowed to send messages." });
-        }
 
         let receiver = await userModel.findById(receiverId);
-        if (!receiver) {
+        if (!receiver)
             return res.status(404).json({ success: false, message: "Receiver not found." });
-        }
-        if (!allowedRoles.includes(receiver.role)) {
-            return res.status(403).json({ success: false, message: "Cannot send message to this user." });
-        }
 
         let data = await messageModel.create({
             property: propertyId || null,
@@ -36,32 +30,29 @@ exports.sendMessage = async (req, res) => {
     }
 };
 
-// Get Conversation for a PROPERTY thread
 exports.getConversation = async (req, res) => {
     try {
-        let userId      = req.headers._id;
+        let userId = req.headers._id;
         let { propertyId, otherUserId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(propertyId) || !mongoose.Types.ObjectId.isValid(otherUserId)) {
+        if (!mongoose.Types.ObjectId.isValid(propertyId) || !mongoose.Types.ObjectId.isValid(otherUserId))
             return res.status(400).json({ success: false, message: "Invalid ID(s)" });
-        }
 
-        let matchStage = {
-            $match: {
-                property: new mongoose.Types.ObjectId(propertyId),
-                $or: [
-                    { sender: new mongoose.Types.ObjectId(userId),      receiver: new mongoose.Types.ObjectId(otherUserId) },
-                    { sender: new mongoose.Types.ObjectId(otherUserId), receiver: new mongoose.Types.ObjectId(userId) }
-                ]
-            }
-        };
-
-        let joinSender   = { $lookup: { from: "users", localField: "sender",   foreignField: "_id", as: "senderInfo" } };
-        let joinReceiver = { $lookup: { from: "users", localField: "receiver", foreignField: "_id", as: "receiverInfo" } };
-        let projectStage = { $project: { "senderInfo.password": 0, "receiverInfo.password": 0 } };
-        let sortStage    = { $sort: { createdAt: 1 } };
-
-        let data = await messageModel.aggregate([matchStage, joinSender, joinReceiver, projectStage, sortStage]);
+        let data = await messageModel.aggregate([
+            {
+                $match: {
+                    property: new mongoose.Types.ObjectId(propertyId),
+                    $or: [
+                        { sender: new mongoose.Types.ObjectId(userId),      receiver: new mongoose.Types.ObjectId(otherUserId) },
+                        { sender: new mongoose.Types.ObjectId(otherUserId), receiver: new mongoose.Types.ObjectId(userId) }
+                    ]
+                }
+            },
+            { $lookup: { from: "users", localField: "sender",   foreignField: "_id", as: "senderInfo" } },
+            { $lookup: { from: "users", localField: "receiver", foreignField: "_id", as: "receiverInfo" } },
+            { $project: { "senderInfo.password": 0, "receiverInfo.password": 0 } },
+            { $sort: { createdAt: 1 } }
+        ]);
 
         await messageModel.updateMany(
             { property: new mongoose.Types.ObjectId(propertyId), receiver: new mongoose.Types.ObjectId(userId), isRead: false },
@@ -74,32 +65,29 @@ exports.getConversation = async (req, res) => {
     }
 };
 
-// Get Conversation for an ITEM thread (marketplace)
 exports.getItemConversation = async (req, res) => {
     try {
-        let userId      = req.headers._id;
+        let userId = req.headers._id;
         let { itemId, otherUserId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(itemId) || !mongoose.Types.ObjectId.isValid(otherUserId)) {
+        if (!mongoose.Types.ObjectId.isValid(itemId) || !mongoose.Types.ObjectId.isValid(otherUserId))
             return res.status(400).json({ success: false, message: "Invalid ID(s)" });
-        }
 
-        let matchStage = {
-            $match: {
-                item: new mongoose.Types.ObjectId(itemId),
-                $or: [
-                    { sender: new mongoose.Types.ObjectId(userId),      receiver: new mongoose.Types.ObjectId(otherUserId) },
-                    { sender: new mongoose.Types.ObjectId(otherUserId), receiver: new mongoose.Types.ObjectId(userId) }
-                ]
-            }
-        };
-
-        let joinSender   = { $lookup: { from: "users", localField: "sender",   foreignField: "_id", as: "senderInfo" } };
-        let joinReceiver = { $lookup: { from: "users", localField: "receiver", foreignField: "_id", as: "receiverInfo" } };
-        let projectStage = { $project: { "senderInfo.password": 0, "receiverInfo.password": 0 } };
-        let sortStage    = { $sort: { createdAt: 1 } };
-
-        let data = await messageModel.aggregate([matchStage, joinSender, joinReceiver, projectStage, sortStage]);
+        let data = await messageModel.aggregate([
+            {
+                $match: {
+                    item: new mongoose.Types.ObjectId(itemId),
+                    $or: [
+                        { sender: new mongoose.Types.ObjectId(userId),      receiver: new mongoose.Types.ObjectId(otherUserId) },
+                        { sender: new mongoose.Types.ObjectId(otherUserId), receiver: new mongoose.Types.ObjectId(userId) }
+                    ]
+                }
+            },
+            { $lookup: { from: "users", localField: "sender",   foreignField: "_id", as: "senderInfo" } },
+            { $lookup: { from: "users", localField: "receiver", foreignField: "_id", as: "receiverInfo" } },
+            { $project: { "senderInfo.password": 0, "receiverInfo.password": 0 } },
+            { $sort: { createdAt: 1 } }
+        ]);
 
         await messageModel.updateMany(
             { item: new mongoose.Types.ObjectId(itemId), receiver: new mongoose.Types.ObjectId(userId), isRead: false },
@@ -112,67 +100,30 @@ exports.getItemConversation = async (req, res) => {
     }
 };
 
-// My Tenants — tenants who have messaged the landlord, grouped by property
-// Used by landlord invoice form to pick a tenant without knowing their ID
 exports.myTenants = async (req, res) => {
     try {
-        let landlordId = req.headers._id;
-        let role       = req.headers.role;
-
-        if (role !== "landlord") {
+        if (req.headers.role !== "landlord")
             return res.status(403).json({ success: false, message: "Only landlords can access this." });
-        }
 
-        // Find all messages where this landlord is the receiver
-        let matchStage = {
-            $match: {
-                receiver: new mongoose.Types.ObjectId(landlordId),
-                property: { $ne: null }
-            }
-        };
-
-        // Group by property + sender to get unique tenant per property
-        let groupStage = {
-            $group: {
-                _id: { property: "$property", tenant: "$sender" }
-            }
-        };
-
-        // Join property info
-        let joinProperty = {
-            $lookup: {
-                from: "properties",
-                localField: "_id.property",
-                foreignField: "_id",
-                as: "propertyInfo"
-            }
-        };
-
-        // Join tenant info
-        let joinTenant = {
-            $lookup: {
-                from: "users",
-                localField: "_id.tenant",
-                foreignField: "_id",
-                as: "tenantInfo"
-            }
-        };
-
-        let projectStage = {
-            $project: {
-                propertyId:   "$_id.property",
-                tenantId:     "$_id.tenant",
-                propertyArea: { $arrayElemAt: ["$propertyInfo.area", 0] },
-                propertyType: { $arrayElemAt: ["$propertyInfo.propertyType", 0] },
-                monthlyRent:  { $arrayElemAt: ["$propertyInfo.monthlyRent", 0] },
-                tenantName:   { $arrayElemAt: ["$tenantInfo.name", 0] },
-                tenantEmail:  { $arrayElemAt: ["$tenantInfo.email", 0] },
-                _id: 0
-            }
-        };
+        let landlordId = req.headers._id;
 
         let data = await messageModel.aggregate([
-            matchStage, groupStage, joinProperty, joinTenant, projectStage
+            { $match: { receiver: new mongoose.Types.ObjectId(landlordId), property: { $ne: null } } },
+            { $group: { _id: { property: "$property", tenant: "$sender" } } },
+            { $lookup: { from: "properties", localField: "_id.property", foreignField: "_id", as: "propertyInfo" } },
+            { $lookup: { from: "users",      localField: "_id.tenant",   foreignField: "_id", as: "tenantInfo" } },
+            {
+                $project: {
+                    propertyId:   "$_id.property",
+                    tenantId:     "$_id.tenant",
+                    propertyArea: { $arrayElemAt: ["$propertyInfo.area",         0] },
+                    propertyType: { $arrayElemAt: ["$propertyInfo.propertyType", 0] },
+                    monthlyRent:  { $arrayElemAt: ["$propertyInfo.monthlyRent",  0] },
+                    tenantName:   { $arrayElemAt: ["$tenantInfo.name",           0] },
+                    tenantEmail:  { $arrayElemAt: ["$tenantInfo.email",          0] },
+                    _id: 0
+                }
+            }
         ]);
 
         res.status(200).json({ success: true, message: "Tenants retrieved", data });
@@ -181,40 +132,35 @@ exports.myTenants = async (req, res) => {
     }
 };
 
-// Admin: Broadcast message to all users (or filtered by role)
 exports.broadcastMessage = async (req, res) => {
     try {
         const adminId = req.headers._id;
-        const role    = req.headers.role;
-        if (role !== "admin") {
+        if (req.headers.role !== "admin")
             return res.status(403).json({ success: false, message: "Only admin can broadcast messages." });
-        }
-        const { message, targetRole } = req.body; // targetRole optional: "tenant","landlord","marketplace" or omit for all
-        if (!message || !message.trim()) {
+
+        const { message, targetRole } = req.body;
+        if (!message || !message.trim())
             return res.status(400).json({ success: false, message: "Message text is required." });
-        }
+
         const query = { _id: { $ne: adminId } };
         if (targetRole) query.role = targetRole;
+
         const users = await userModel.find(query).select("_id").lean();
-        if (users.length === 0) {
+        if (users.length === 0)
             return res.status(404).json({ success: false, message: "No users found for that role." });
-        }
+
         const docs = users.map(u => ({
-            property: null,
-            item:     null,
-            sender:   adminId,
-            receiver: u._id,
-            message:  message.trim(),
-            isRead:   false
+            property: null, item: null, sender: adminId,
+            receiver: u._id, message: message.trim(), isRead: false
         }));
         await messageModel.insertMany(docs);
+
         res.status(200).json({ success: true, message: `Broadcast sent to ${docs.length} user(s).`, count: docs.length });
     } catch (e) {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }
 };
 
-// Inbox — all threads (property + item) with other user info and unread count
 exports.inbox = async (req, res) => {
     try {
         const Property    = require("../models/propertyModel");
@@ -222,12 +168,10 @@ exports.inbox = async (req, res) => {
 
         let userId = new mongoose.Types.ObjectId(req.headers._id);
 
-        // Get all messages involving this user
         let allMessages = await messageModel.find({
             $or: [{ sender: userId }, { receiver: userId }]
         }).sort({ createdAt: -1 }).lean();
 
-        // ── Build thread map (one pass, no DB calls) ──
         const threadMap = new Map();
         for (let msg of allMessages) {
             let otherId = msg.sender.equals(userId) ? msg.receiver : msg.sender;
@@ -245,39 +189,30 @@ exports.inbox = async (req, res) => {
                     unreadCount: 0
                 });
             }
-            if (!msg.sender.equals(userId) && !msg.isRead) {
+            if (!msg.sender.equals(userId) && !msg.isRead)
                 threadMap.get(context).unreadCount++;
-            }
         }
 
         const threads = [...threadMap.values()];
-        if (threads.length === 0) {
+        if (threads.length === 0)
             return res.status(200).json({ success: true, message: "Inbox retrieved", data: [] });
-        }
 
-        // ── Batch-fetch all other users in ONE query ──
         const otherUserIds  = [...new Set(threads.map(t => String(t.otherId)))];
-        const otherUsersArr = await userModel.find({ _id: { $in: otherUserIds } })
-            .select("name email role").lean();
+        const otherUsersArr = await userModel.find({ _id: { $in: otherUserIds } }).select("name email role").lean();
         const userMap = new Map(otherUsersArr.map(u => [String(u._id), u]));
 
-        // ── Batch-fetch all property contexts in ONE query ──
         const propIds  = threads.filter(t => t.contextType === "property").map(t => t.contextId);
         const propsArr = propIds.length
-            ? await Property.find({ _id: { $in: propIds } })
-                .select("area address propertyType monthlyRent").lean()
+            ? await Property.find({ _id: { $in: propIds } }).select("area address propertyType monthlyRent").lean()
             : [];
         const propMap = new Map(propsArr.map(p => [String(p._id), p]));
 
-        // ── Batch-fetch all marketplace item contexts in ONE query ──
         const itemIds  = threads.filter(t => t.contextType === "item").map(t => t.contextId);
         const itemsArr = itemIds.length
-            ? await Marketplace.find({ _id: { $in: itemIds } })
-                .select("title price images").lean()
+            ? await Marketplace.find({ _id: { $in: itemIds } }).select("title price images").lean()
             : [];
         const itemMap = new Map(itemsArr.map(i => [String(i._id), i]));
 
-        // ── Assemble final thread list ──
         const result = threads.map(thread => ({
             contextType: thread.contextType,
             contextId:   String(thread.contextId),
@@ -298,4 +233,3 @@ exports.inbox = async (req, res) => {
         res.status(500).json({ success: false, error: e.toString(), message: e.message });
     }
 };
-

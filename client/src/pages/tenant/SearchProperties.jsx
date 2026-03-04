@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { allPropertiesAPI } from "../../api/propertyAPI";
 
-const API_BASE   = "/api/v1/get-file/";
+const API_BASE   = "";
 const PER_PAGE   = 20;
 const FACILITIES = ["Gas","Water","Lift","WiFi","Generator","Parking","Security","CCTV","AC","Furnished"];
 

@@ -9,7 +9,7 @@ import { broadcastMessageAPI } from "../../api/messageAPI";
 
 const ROLE_COLOR = { landlord:"#1a1a2e", tenant:"#2980b9", marketplace:"#27ae60", admin:"#e74c3c" };
 const ROLE_LABEL = { landlord:"Landlord", tenant:"Tenant", marketplace:"Marketplace User", admin:"Admin" };
-const API_BASE   = "/api/v1/get-file/";
+const API_BASE   = "";
 
 /* ─── SVG helper ─── */
 const SVGIcon = ({ d, size=18 }) => (
@@ -461,7 +461,7 @@ const AdminSection = () => {
                                     : recentMktItems.map(item=>(
                                         <div key={item._id} style={{background:"#fff",borderRadius:10,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
                                             {item.images?.[0]
-                                                ? <img src={`/api/v1/get-file/${item.images[0]}`} alt="" style={{width:"100%",height:65,objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>
+                                                ? <img src={item.images[0]} alt="" style={{width:"100%",height:65,objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>
                                                 : <div style={{height:65,background:"#f5f6fa",display:"flex",alignItems:"center",justifyContent:"center",color:"#ccc"}}><SVGIcon d={ICONS.bag} size={22}/></div>}
                                             <div style={{padding:"0.45rem 0.6rem"}}>
                                                 <div style={{fontWeight:700,fontSize:"0.75rem",color:"#1a1a2e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>

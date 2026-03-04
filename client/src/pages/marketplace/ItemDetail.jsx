@@ -108,7 +108,7 @@ const ItemDetail = ({ user }) => {
                             {images.length > 0 ? (
                                 <>
                                     <div style={{position:"relative",height:340,background:"#f0f2ff"}}>
-                                        <img src={`/api/v1/get-file/${images[activeImg]}`} alt={item.title}
+                                        <img src={images[activeImg]} alt={item.title}
                                             style={{width:"100%",height:"100%",objectFit:"cover"}}
                                             onError={e=>e.target.style.display="none"}/>
                                         {images.length > 1 && (
@@ -126,7 +126,7 @@ const ItemDetail = ({ user }) => {
                                     {images.length > 1 && (
                                         <div style={{display:"flex",gap:"0.5rem",padding:"0.6rem",background:"#fff",overflowX:"auto"}}>
                                             {images.map((img,i)=>(
-                                                <img key={i} src={`/api/v1/get-file/${img}`} alt=""
+                                                <img key={i} src={img} alt=""
                                                     onClick={()=>setActiveImg(i)}
                                                     style={{width:64,height:52,objectFit:"cover",borderRadius:6,cursor:"pointer",
                                                         border:`2px solid ${i===activeImg?"#e94560":"transparent"}`,flexShrink:0}}
