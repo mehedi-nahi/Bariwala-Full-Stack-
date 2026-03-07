@@ -32,7 +32,6 @@ const Navbar = ({ user, setUser }) => {
                 <Link to="/" onClick={close}>Rentals</Link>
                 <Link to="/marketplace/items" onClick={close}>Marketplace</Link>
                 <Link to="/login" onClick={close}>Login</Link>
-                <Link to="/register" onClick={close}>Register</Link>
             </>}
             {user?.role === "landlord" && <>
                 <Link to="/" onClick={close}>Home</Link>
