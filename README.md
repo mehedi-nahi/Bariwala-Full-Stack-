@@ -31,6 +31,7 @@
 | Password    | bcryptjs (cost factor 10)                                   |
 | Frontend    | React 19 + Vite 6                                           |
 | HTTP Client | Axios (via shared `axiosInstance.js`)                       |
+| Animation   | [Motion](https://motion.dev) (`motion/react`), respects “reduce motion” |
 | Routing     | React Router DOM v7                                         |
 | Hosting     | Vercel (single repo, full-stack)                            |
 | Dev tools   | Nodemon, ESLint, Concurrently                               |
@@ -40,46 +41,55 @@
 ## Feature Overview
 
 ### 🏘️ Property Rental
-- Public property search with filters (area, type, rent range, availability)
-- Pagination using MongoDB `$facet` aggregation
-- Tenant sends a **rental request** to landlord with optional message
-- Landlord **accepts / rejects** requests from `MyProperties` panel
-- Accepted tenants appear pre-filled on invoice form
-- Landlord generates **monthly invoices** with due date, notes, and optional extension
-- Tenant pays via simulated **payment gateway** (bKash, Nagad, Rocket, Card, Bank Transfer)
-- Invoices auto-expire to **Overdue** status after `expiresAt` passes
-- Full payment receipts with transaction reference numbers
+- Public search by **area or address**, type, rent range and **facilities**; sorting happens on the server so it is correct across pages; filters live in the URL (shareable, survive reload / back button)
+- Landlord tools: add / edit / delete listings, mark **Available ↔ Rented**, up to 5 photos with drag-and-drop, preview and validation
+- Tenant sends a **rental request** (optional message) and can **cancel** it while pending; a new **My requests** page tracks every application
+- Landlord **accepts / declines** requests inline on *My properties* (pending ones are expanded by default)
+- Landlord creates **monthly invoices** only for accepted tenants (property → tenant → month), can **extend** a due date once (3–7 days) and sees *Pending / Overdue / Paid* tabs
+- Tenant pays through a **simulated gateway** (bKash, Nagad, Rocket, card, bank transfer) with inline validation, a demo-mode banner and a printable receipt
+- Invoices flip to **Overdue** automatically once the due date passes
 
 ### 💬 Messaging (Inbox)
-- Bi-directional chat between tenant↔landlord (property context) and buyer↔seller (marketplace context)
-- Inbox shows all threads with unread badge count
-- Auto-marks messages as read on open
-- 8-second polling for new messages (simulated real-time)
-- Thread search by contact name
+- Tenant ↔ landlord (per property), buyer ↔ seller (per item) and admin announcements ("direct" threads you can reply to)
+- Unread badge in the top bar (refreshes automatically), conversation search, day separators, Enter-to-send, mobile list → chat navigation
+- Opening a conversation only marks *that* person's messages as read
 
 ### 🛒 Marketplace
-- Marketplace-role users can list second-hand / new items (furniture, appliances, etc.)
-- Image upload via Cloudinary (up to 5 images per listing)
-- Cart sidebar with multi-item checkout
-- Simulated marketplace payment gateway with shipping info form
-- Buyer can message seller directly from item detail page
-- All users (landlord & tenant) can browse the marketplace from the navbar
+- Categories, condition, price range, free-text search and sorting (all server-side)
+- **Cart available on every page** (top-bar cart icon with live count, "Buy now", persisted per account)
+- Safe **checkout**: the server claims each item atomically, so two buyers can never buy the same listing; unavailable items are reported back
+- **My orders** page for buyers, delivery details (name, phone, address) for sellers on sold items, "mark as sold" for offline sales
+- Role-aware prompts instead of silent failures when a guest / non-marketplace account tries to buy or message
 
 ### ⭐ Reviews & Ratings
-- Tenant → Landlord review (after viewing property detail)
-- Landlord → Tenant review (from property detail, by providing tenant ID)
-- Duplicate review prevention (unique: reviewer + reviewee + property + type)
-- Average rating calculation displayed on landlord profile
+- Tenants review the landlord, landlords review a tenant – chosen **by name** from a list (no more pasting IDs)
+- Reviews require an accepted rental request between the two people, one review per pair per property
 
 ### 🚩 Reporting
-- Any user can report a property, marketplace item, or another user
-- Reports queue in admin panel with Pending → Reviewed → Resolved workflow
+- One consistent report dialog (quick-reason chips + required description) for listings, items and users
+- Duplicate open reports are blocked; admins see *what* was reported (name + link), not just an ID
 
 ### 🔧 Admin Panel
-- View, block/unblock all users
-- Paginated user, report, and transaction tables with filter controls
-- Remove property listings and marketplace items from reports
-- Block reported users directly from the reports panel
+- Dashboard with platform totals (users by role, blocked, pending reports, rent collected, overdue)
+- Users: search, role / status filters, block / unblock with confirmation (blocked users lose access immediately)
+- Reports: filter by status, resolve, remove content or block the user in one click
+- Transactions: status filter and revenue summary; announcement broadcast to everyone or one role
+
+### ✨ Experience
+- One design system (tokens, components, dark nav, accessible focus states), fully responsive from 320 px phones to desktops
+- Toast notifications for every action, on-brand confirmation dialogs (no `window.confirm`), skeleton loaders, empty / error states with retry
+- Inline form validation, password-strength meter, show / hide password, change-password in the dashboard
+- Keyboard accessible: skip link, focus-trapped dialogs, labelled controls, screen-reader live regions
+- Pages are code-split and loaded on demand; session expiry is detected and explained
+- Motion-powered animations: page transitions, staggered card reveals, spring buttons, count-up statistics, a 3D-tilt hero card with floating badges, a sliding active-tab pill in the navbar, animated dropdowns / mobile menu / cart drawer / toasts, and a reading-progress bar on articles
+- Frosted-glass surfaces (navbar, dropdowns, dialogs, cart drawer, auth cards) with a solid fallback where `backdrop-filter` is unsupported
+- Password fields with a show / hide toggle that keeps focus and caret position
+- Content pages: **About us** (`/about`), **Blog** (`/blog`, `/blog/:slug`) with an About teaser and a swipeable, auto-playing blog carousel on the landing page
+- Custom animated dropdowns (`components/Select.jsx`) replace native selects: check marks, keyboard support (↑ ↓ Home End Enter Esc, type-ahead), open upwards near the screen edge
+- Buttons with click ripples, hover sweep and nudging arrows; cursor-following card spotlight; scroll-linked sections that grow into view
+- Photo galleries with animated slides, swipe on touch screens and arrow-key navigation
+- Notifications with a countdown bar (hover to pause); back-to-top button; press `/` to jump to search
+- Dashboard: time-of-day greeting and a per-role “Getting started” checklist built from the user's real data
 
 ---
 
@@ -87,12 +97,12 @@
 
 | Role          | Can Do                                                                                               |
 |---------------|------------------------------------------------------------------------------------------------------|
-| `tenant`      | Browse/search properties & marketplace, send rental requests, pay invoices, message landlords, write reviews |
-| `landlord`    | List/manage properties, view rental requests, generate invoices, message tenants, browse marketplace, write reviews |
-| `marketplace` | Post/manage items for sale, message buyers/sellers, use cart checkout                                |
-| `admin`       | Full access to users, reports, transactions; block users; remove listings                            |
+| `tenant`      | Search homes, send / cancel rental requests, pay invoices & print receipts, message landlords, review landlords |
+| `landlord`    | List / manage properties, accept or decline requests, create & extend invoices, message tenants, review tenants |
+| `marketplace` | Sell items, buy through the cart & checkout, track orders, message buyers / sellers                  |
+| `admin`       | Dashboard, user management, report moderation, all transactions, announcements                       |
 
-> **Note:** Admin accounts must be created directly in the database (not via the register endpoint).
+> **Note:** Admin accounts cannot be self-registered. `npm run seed` creates `admin@demo.com`; in production insert an admin user directly in the database.
 
 ---
 
@@ -131,31 +141,39 @@ Bariwala/
 │   │   ├── reportModel.js
 │   │   └── marketplaceModel.js
 │   ├── middlewares/
-│   │   ├── authVerification.js   # JWT decode → sets req.headers.{email,_id,role}
+│   │   ├── authVerification.js   # JWT decode + live account check (blocked users are locked out at once)
+│   │   ├── optionalAuth.js       # identifies the user on public routes without rejecting guests
 │   │   ├── adminVerification.js  # role === "admin" guard
 │   │   └── fileUploads.js        # Multer + Cloudinary storage, 8 MB limit, image-only
 │   └── utility/
-│       └── tokenUtility.js       # EncodeToken / DecodeToken helpers
+│       ├── tokenUtility.js       # EncodeToken / DecodeToken helpers
+│       ├── errorUtility.js       # sendError(): clean 4xx/5xx responses, never leaks internals
+│       └── validators.js         # isId, escapeRegex, clampInt, email / phone patterns
 │
 ├── uploads/                  # (empty — images are stored on Cloudinary CDN)
 ├── demo_data/
 │   └── seed.js               # Database seeder (run: npm run seed)
+├── tests/
+│   └── api.test.js           # API integration tests (npm test)
 │
 └── client/                   # React 19 + Vite frontend
-    ├── vite.config.js        # Vite proxy: /api/v1 → localhost:3000
+    ├── vite.config.js        # Vite proxy: /api → localhost:8000
     └── src/
-        ├── App.jsx           # Root router, auth state, role-gated routes
-        ├── api/              # Axios API layer (one file per domain)
-        ├── components/
-        │   ├── Navbar.jsx
-        │   ├── Footer.jsx
-        │   └── PrivateRoute.jsx
+        ├── index.css         # Design system: tokens, buttons, forms, cards, modals, layout, responsive rules
+        ├── App.jsx           # Providers, lazy-loaded routes, session restore / expiry handling
+        ├── api/              # Axios API layer (one file per domain) + 401 handling
+        ├── context/          # Toast, confirm-dialog and cart contexts
+        ├── hooks/            # useAsync (loading / error state), useDebounce, useDocumentTitle
+        ├── utils/            # format (money, dates), validate, errors, constants
+        ├── components/       # Navbar, Footer, Modal, ui.jsx (Button, Field, Alert, EmptyState, …),
+        │                     # ImagePicker, DemoPayment, CartProvider / CheckoutModal, ReportModal,
+        │                     # MessageComposer, ReceiptModal, PrivateRoute, ErrorBoundary
         └── pages/
             ├── auth/         # Login, Register
-            ├── shared/       # Profile (role-adaptive dashboard)
-            ├── tenant/       # SearchProperties, PropertyDetail, Inbox, PaymentHistory
-            ├── landlord/     # MyProperties, AddProperty, EditProperty, LandlordInvoices
-            ├── marketplace/  # AllItems, AddItem, MyItems, ItemDetail
+            ├── shared/       # Profile (role-based dashboard + security), Help, NotFound
+            ├── tenant/       # SearchProperties, PropertyDetail, MyRequests, PaymentHistory, Inbox
+            ├── landlord/     # MyProperties, PropertyForm, AddProperty, EditProperty, LandlordInvoices
+            ├── marketplace/  # AllItems, ItemDetail, AddItem, MyItems, MyOrders
             └── admin/        # AdminUsers, AdminReports, AdminTransactions
 ```
 
@@ -292,9 +310,13 @@ Bariwala/
 | `description` | String   | ❌       | `""`    |                             |
 | `price`       | Number   | ✅       | —       | BDT                         |
 | `condition`   | String   | ✅       | —       | Enum: New / Used            |
+| `category`    | String   | ❌       | `Other` | Furniture, Electronics, Appliances, Books, Clothing, Sports, Other |
 | `images`      | [String] | ❌       | `[]`    | Cloudinary URLs             |
 | `isRemoved`   | Boolean  | ❌       | `false` | Soft delete flag            |
-| `isSold`      | Boolean  | ❌       | `false` | Marked sold after checkout  |
+| `isSold`      | Boolean  | ❌       | `false` | Set at checkout (or by the seller) |
+| `soldAt`      | Date     | ❌       | `null`  |                             |
+| `buyer`       | ObjectId | ❌       | `null`  | Ref: `users` – who bought it |
+| `buyerInfo`   | Object   | ❌       | —       | name, phone, addressLine, area, city, txnRef – shown to the seller for delivery |
 
 ---
 
@@ -331,7 +353,9 @@ All routes are prefixed with `/api/v1`. 🔒 = requires auth cookie/token. 🛡�
 | POST   | `/login`                   | —    | Login → sets JWT cookie                  |
 | GET    | `/logout`                  | 🔒   | Clear JWT cookie                         |
 | GET    | `/profile`                 | 🔒   | Get own profile (no password)            |
+| GET    | `/session`                 | —    | Current user or `null` (used on app start; never 401) |
 | POST   | `/update-profile`          | 🔒   | Update name, phone, bio                  |
+| POST   | `/change-password`         | 🔒   | Change password (needs the current one)  |
 | POST   | `/file-upload`             | 🔒   | Upload single image → Cloudinary         |
 | GET    | `/user-profile/:userId`    | —    | Public profile (safe fields only)        |
 | GET    | `/search-tenants?q=`       | 🔒   | Search tenants by name/email             |
@@ -341,7 +365,7 @@ All routes are prefixed with `/api/v1`. 🔒 = requires auth cookie/token. 🛡�
 | Method | Path                          | Auth | Description                       |
 |--------|-------------------------------|------|-----------------------------------|
 | POST   | `/create-property`            | 🔒   | Landlord creates property listing |
-| GET    | `/all-properties`             | —    | Public search with filters & pagination |
+| GET    | `/all-properties`             | —    | Public search: `q`, `propertyType`, `minRent`, `maxRent`, `facilities` (comma list), `sort` (`newest` / `price-asc` / `price-desc`), `pageNo`, `perPage` |
 | GET    | `/single-property/:id`        | —    | Property detail with reviews      |
 | POST   | `/update-property/:id`        | 🔒   | Update property (owner only)      |
 | DELETE | `/delete-property/:id`        | 🔒   | Soft delete (owner only)          |
@@ -353,6 +377,7 @@ All routes are prefixed with `/api/v1`. 🔒 = requires auth cookie/token. 🛡�
 | Method | Path                                    | Auth | Description                           |
 |--------|-----------------------------------------|------|---------------------------------------|
 | POST   | `/rental-request`                       | 🔒   | Tenant sends request to landlord      |
+| POST   | `/cancel-rental-request/:requestId`     | 🔒   | Tenant withdraws a pending request    |
 | GET    | `/my-rental-requests`                   | 🔒   | Tenant views their requests           |
 | GET    | `/incoming-rental-requests`             | 🔒   | Landlord views incoming requests      |
 | POST   | `/respond-rental-request/:requestId`    | 🔒   | Landlord accepts/rejects request      |
@@ -376,6 +401,8 @@ All routes are prefixed with `/api/v1`. 🔒 = requires auth cookie/token. 🛡�
 | POST   | `/broadcast-message`                         | 🔒🛡️ | Admin broadcasts to all/role users |
 | GET    | `/conversation/:propertyId/:otherUserId`     | 🔒   | Fetch property thread messages    |
 | GET    | `/item-conversation/:itemId/:otherUserId`    | 🔒   | Fetch marketplace item thread     |
+| GET    | `/direct-conversation/:otherUserId`          | 🔒   | Messages that belong to no listing (announcements) |
+| GET    | `/unread-count`                              | 🔒   | Number of unread messages (top-bar badge) |
 | GET    | `/inbox`                                     | 🔒   | All inbox threads with unread count |
 | GET    | `/my-tenants`                                | 🔒   | Landlord's messaged tenants list  |
 
@@ -384,12 +411,14 @@ All routes are prefixed with `/api/v1`. 🔒 = requires auth cookie/token. 🛡�
 | Method | Path                  | Auth | Description                         |
 |--------|-----------------------|------|-------------------------------------|
 | POST   | `/create-item`        | 🔒   | Marketplace user posts item         |
-| GET    | `/all-items`          | —    | Public listing with filters         |
+| GET    | `/all-items`          | —    | Public listing: `q`, `category`, `condition`, `minPrice`, `maxPrice`, `sort`, paging |
 | GET    | `/single-item/:id`    | —    | Item detail with seller info        |
 | POST   | `/update-item/:id`    | 🔒   | Update item (owner only)            |
 | DELETE | `/delete-item/:id`    | 🔒   | Soft delete item (owner only)       |
 | GET    | `/my-items`           | 🔒   | Seller's own listings               |
-| POST   | `/mark-sold/:id`      | 🔒   | Mark item as sold after checkout    |
+| GET    | `/my-orders`          | 🔒   | Items the user has bought           |
+| POST   | `/mark-sold/:id`      | 🔒   | Seller marks **their own** item as sold |
+| POST   | `/checkout`           | 🔒   | Buy cart items atomically (`itemIds`, `buyer`, `txnRef`) |
 
 ### Reviews
 
@@ -409,7 +438,8 @@ All routes are prefixed with `/api/v1`. 🔒 = requires auth cookie/token. 🛡�
 
 | Method | Path                            | Auth       | Description                         |
 |--------|---------------------------------|------------|-------------------------------------|
-| GET    | `/admin/all-users`              | 🔒🛡️      | Paginated user list                 |
+| GET    | `/admin/overview`               | 🔒🛡️      | Platform totals for the dashboard   |
+| GET    | `/admin/all-users`              | 🔒🛡️      | Paginated users: `q`, `role`, `status` filters |
 | POST   | `/admin/block-user/:id`         | 🔒🛡️      | Toggle block/unblock user           |
 | DELETE | `/admin/remove-listing/:id`     | 🔒🛡️      | Soft delete a property              |
 | DELETE | `/admin/remove-item/:id`        | 🔒🛡️      | Soft delete a marketplace item      |
@@ -439,7 +469,7 @@ All routes are prefixed with `/api/v1`. 🔒 = requires auth cookie/token. 🛡�
          [Landlord generates Invoice]
                     │
                     ▼
-              status: "Pending"  (expiresAt = +7 days)
+              status: "Pending"  (expiresAt = dueDate)
                     │
               ┌─────┴──────────────────────┐
               │                            │
@@ -482,15 +512,26 @@ cp .env.example .env
 ### 3. Seed Demo Data
 
 ```bash
-npm run seed
+npm run seed              # only runs on an empty database
+npm run seed -- --reset   # wipe and re-seed
+```
+
+Demo logins (password `Passw0rd!`): `admin@demo.com`, `landlord@demo.com`, `tenant@demo.com`, `tenant2@demo.com`, `seller@demo.com`, `buyer@demo.com`.
+
+### Tests & lint
+
+```bash
+npm install --no-save mongodb-memory-server   # one-off: throw-away MongoDB used by the tests
+npm test                                      # ~185 API checks (auth, rentals, payments, marketplace, admin, security)
+cd client && npm run lint && npm run build
 ```
 
 ### 4. Run in Development
 
 ```bash
 npm run dev
-# Backend:  http://localhost:3000
-# Frontend: http://localhost:5173  (proxied to backend)
+# Backend:  http://localhost:8000
+# Frontend: http://localhost:5173  (proxies /api to the backend)
 ```
 
 ### 5. Run in Production
@@ -535,7 +576,7 @@ CLOUDINARY_API_SECRET
 
 | Variable                  | Required | Example                              | Description                         |
 |---------------------------|----------|--------------------------------------|-------------------------------------|
-| `PORT`                    | ❌       | `3000`                               | Express server port                 |
+| `PORT`                    | ❌       | `8000`                               | Express server port                 |
 | `NODE_ENV`                | ❌       | `production`                         | Enables secure cookies in production|
 | `DB_URL`                  | ✅       | `mongodb+srv://...`                  | MongoDB connection string           |
 | `JWT_SECRET`              | ✅       | `change_this_to_random_string`       | Secret key for JWT signing          |
@@ -544,6 +585,7 @@ CLOUDINARY_API_SECRET
 | `CLOUDINARY_CLOUD_NAME`   | ✅       | `your_cloud_name`                    | Cloudinary account cloud name       |
 | `CLOUDINARY_API_KEY`      | ✅       | `123456789012345`                    | Cloudinary API key                  |
 | `CLOUDINARY_API_SECRET`   | ✅       | `abc123...`                          | Cloudinary API secret               |
+| `CLIENT_ORIGIN`           | ❌       | `https://app.example.com`            | Only if the React app is hosted on a **different domain** (enables CORS + cross-site cookies). Leave empty for the normal single-domain deployment |
 
 ---
 
@@ -555,7 +597,8 @@ CLOUDINARY_API_SECRET
 | `npm run dev` | Nodemon + Vite concurrently | Development with hot reload |
 | `npm run server` | `nodemon index.js` | Backend only |
 | `npm run client` | `cd client && npm run dev` | Frontend only |
-| `npm run seed` | `node demo_data/seed.js` | Populate demo data |
+| `npm run seed` | `node demo_data/seed.js` | Populate demo data (`-- --reset` to wipe first) |
+| `npm test` | `node tests/api.test.js` | API integration tests (needs `mongodb-memory-server` or `TEST_DB_URL`) |
 | `npm run build` | `cd client && npm install && npm run build` | Build frontend for production |
 
 

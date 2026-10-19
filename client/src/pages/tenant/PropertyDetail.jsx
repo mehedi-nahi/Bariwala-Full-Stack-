@@ -1,864 +1,430 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { singlePropertyAPI } from "../../api/propertyAPI";
-import { sendMessageAPI } from "../../api/messageAPI";
-import { createReportAPI } from "../../api/reportAPI";
-import { createReviewAPI, userReviewsAPI } from "../../api/reviewAPI";
-import { sendRentalRequestAPI, rentalRequestStatusAPI, incomingRentalRequestsAPI } from "../../api/rentalRequestAPI";
+import { userReviewsAPI, createReviewAPI } from "../../api/reviewAPI";
+import {
+    sendRentalRequestAPI, rentalRequestStatusAPI, cancelRentalRequestAPI, incomingRentalRequestsAPI,
+} from "../../api/rentalRequestAPI";
+import { useToast } from "../../context/ToastContext";
+import { useConfirm } from "../../context/ConfirmContext";
+import { getErrorMessage } from "../../utils/errors";
+import { fmtDate, money } from "../../utils/format";
+import useAsync from "../../hooks/useAsync";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
+import { Alert, Avatar, Button, EmptyState, ErrorState, Field, PageHeader, PageLoader, StarInput, Stars, StatusBadge } from "../../components/ui";
+import Modal from "../../components/Modal";
+import ImageGallery from "../../components/ImageGallery";
+import Icon from "../../components/Icon";
 import LoginPromptModal from "../../components/LoginPromptModal";
+import ReportModal from "../../components/ReportModal";
+import MessageComposer from "../../components/MessageComposer";
+import Select from "../../components/Select";
 
-const API_BASE = "";
+/* ── Rental request dialog ─────────────────────────────── */
+const RequestModal = ({ property, onClose, onSent }) => {
+    const toast = useToast();
+    const [note, setNote] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
 
-/* ── small helpers ── */
-const Stars = ({ n = 0 }) => (
-    <span style={{ color:"#c0392b", fontSize:"0.9rem", letterSpacing:2 }}>
-        {"★".repeat(Math.round(n))}{"☆".repeat(5 - Math.round(n))}
-    </span>
-);
-
-const Avatar = ({ name, size = 40 }) => {
-    const colors = ["#c0392b","#1a1a2e","#2980b9","#27ae60","#8e44ad","#e67e22"];
-    const bg = colors[(name?.charCodeAt(0) || 0) % colors.length];
-    const letters = name ? name.trim().split(/\s+/).map(w => w[0]).join("").slice(0,2).toUpperCase() : "?";
-    return (
-        <div style={{ width:size, height:size, borderRadius:"50%", background:bg, color:"#fff",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontWeight:700, fontSize:size*0.32, flexShrink:0 }}>
-            {letters}
-        </div>
-    );
-};
-
-/* ── Request-to-Rent popup modal ── */
-const RentRequestModal = ({ property, rentRequest, onClose, onSent }) => {
-    const [note, setNote]       = useState("");
-    const [msg,  setMsg]        = useState("");
-    const [busy, setBusy]       = useState(false);
-
-    const submit = async () => {
-        setBusy(true); setMsg("");
+    const submit = async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError("");
         try {
-            const res = await sendRentalRequestAPI({ propertyId: property._id, message: note });
+            const res = await sendRentalRequestAPI({ propertyId: property._id, message: note.trim() });
+            toast.success("Request sent! The landlord will review it soon.");
             onSent(res.data.data);
-            setMsg("✅ Request sent! The landlord will review it.");
         } catch (err) {
-            setMsg(err.response?.data?.message || "❌ Failed to send request.");
+            setError(getErrorMessage(err, "Could not send your request."));
         } finally { setBusy(false); }
     };
 
     return (
-        <div style={{
-            position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
-            zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center",
-            padding:"1rem"
-        }} onClick={onClose}>
-            <div style={{
-                background:"#fff", width:"100%", maxWidth:480,
-                border:"1px solid #e8e4dc",
-                boxShadow:"0 20px 60px rgba(0,0,0,0.18)",
-                overflow:"hidden"
-            }} onClick={e => e.stopPropagation()}>
-
-                {/* header bar */}
-                <div style={{ background:"#111", padding:"1.1rem 1.5rem", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{ color:"#fff", fontWeight:700, fontSize:"0.82rem", textTransform:"uppercase", letterSpacing:"0.1em" }}>Request to Rent</span>
-                    <button onClick={onClose} style={{
-                        background:"none", border:"none", color:"#888", cursor:"pointer",
-                        fontSize:"1.2rem", lineHeight:1, padding:0, textTransform:"none", letterSpacing:0
-                    }}>✕</button>
+        <Modal
+            title="Request to rent" onClose={onClose} dismissible={!busy}
+            footer={<>
+                <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+                <Button type="submit" form="rent-form" loading={busy}>Send request</Button>
+            </>}
+        >
+            <form id="rent-form" onSubmit={submit} noValidate>
+                <div className="summary-box">
+                    <div className="kv"><span>Property</span><span>{property.propertyType} · {property.area}</span></div>
+                    <div className="kv"><span>Monthly rent</span><span>{money(property.monthlyRent)}</span></div>
+                    {property.advanceDeposit > 0 && <div className="kv"><span>Advance deposit</span><span>{money(property.advanceDeposit)}</span></div>}
                 </div>
+                {error && <Alert tone="error">{error}</Alert>}
+                <Field label="Message to landlord" optional hint="Introduce yourself – who will live here, when you'd like to move in.">
+                    <textarea value={note} maxLength={500} onChange={e => setNote(e.target.value)} placeholder="Hi, I'm interested in this home…" data-autofocus />
+                </Field>
+                <div className="char-count">{note.length}/500</div>
+            </form>
+        </Modal>
+    );
+};
 
-                <div style={{ padding:"1.6rem" }}>
-                    {/* property summary */}
-                    <div style={{ display:"flex", gap:"0.9rem", alignItems:"center", marginBottom:"1.4rem",
-                        padding:"0.9rem", background:"#fafaf8", border:"1px solid #f0ede8" }}>
-                        {property.images?.[0] ? (
-                            <img src={API_BASE + property.images[0]} alt=""
-                                style={{ width:72, height:56, objectFit:"cover", flexShrink:0 }} />
-                        ) : (
-                            <div style={{ width:72, height:56, background:"#e8e4dc", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", color:"#aaa", fontSize:"1.4rem" }}>🏠</div>
+/* ── Reviews ───────────────────────────────────────────── */
+const ReviewsTab = ({ property, landlord, reviews, avg, user, canReview, acceptedTenants, onReviewed }) => {
+    const toast = useToast();
+    const isLandlordOwner = user?.role === "landlord";
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState("");
+    const [tenantId, setTenantId] = useState("");
+    const [sending, setSending] = useState(false);
+    const [error, setError] = useState("");
+
+    const submit = async (e) => {
+        e.preventDefault();
+        if (isLandlordOwner && !tenantId) { setError("Choose which tenant you are reviewing."); return; }
+        setSending(true);
+        setError("");
+        try {
+            await createReviewAPI({
+                revieweeId: isLandlordOwner ? tenantId : landlord._id,
+                propertyId: property._id,
+                reviewType: isLandlordOwner ? "landlord-to-tenant" : "tenant-to-landlord",
+                rating, comment: comment.trim(),
+            });
+            toast.success("Thanks! Your review was posted.");
+            setComment("");
+            onReviewed();
+        } catch (err) {
+            setError(getErrorMessage(err, "Could not post your review."));
+        } finally { setSending(false); }
+    };
+
+    return (
+        <div className="stack stack-md">
+            {avg && (
+                <div className="card card-pad row" style={{ gap: "1.2rem" }}>
+                    <div style={{ fontSize: "2.6rem", fontWeight: 800, lineHeight: 1 }}>{avg}</div>
+                    <div><Stars value={avg} /><div className="small muted">Landlord rating · {reviews.length} review{reviews.length === 1 ? "" : "s"}</div></div>
+                </div>
+            )}
+
+            {reviews.length === 0 ? (
+                <EmptyState icon="star" title="No reviews yet">Reviews appear here after tenants and landlords have worked together.</EmptyState>
+            ) : (
+                <div className="card">
+                    {reviews.map((r, idx) => (
+                        <div key={r._id} className="card-pad row row-top" style={{ gap: "0.8rem", borderTop: idx ? "1px solid var(--line)" : 0 }}>
+                            <Avatar name={r.reviewerInfo?.[0]?.name} size={38} />
+                            <div className="grow">
+                                <div className="row-between"><strong>{r.reviewerInfo?.[0]?.name || "Anonymous"}</strong><span className="xs muted">{fmtDate(r.createdAt)}</span></div>
+                                <Stars value={r.rating} />
+                                {r.comment && <p className="mt-1">{r.comment}</p>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {canReview ? (
+                <form className="card card-pad" onSubmit={submit} noValidate>
+                    <h3>{isLandlordOwner ? "Review a tenant" : "Review this landlord"}</h3>
+                    {error && <Alert tone="error">{error}</Alert>}
+                    {isLandlordOwner && (
+                        <Field label="Tenant" required>
+                            <Select value={tenantId} onChange={e => { setTenantId(e.target.value); setError(""); }}>
+                                <option value="">Select a tenant</option>
+                                {acceptedTenants.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
+                            </Select>
+                        </Field>
+                    )}
+                    <div><div className="field-label mb-1">Your rating</div><StarInput value={rating} onChange={setRating} /></div>
+                    <Field label="Comment" optional>
+                        <textarea value={comment} maxLength={500} onChange={e => setComment(e.target.value)} placeholder="Share your experience…" />
+                    </Field>
+                    <div className="form-actions"><Button type="submit" loading={sending}>Post review</Button></div>
+                </form>
+            ) : user && ["tenant", "landlord"].includes(user.role) ? (
+                <Alert tone="info">
+                    {user.role === "tenant"
+                        ? "You can review this landlord once your rental request for this property has been accepted."
+                        : isLandlordOwner && acceptedTenants.length === 0
+                            ? "Once you accept a tenant's request for this property you can review them here."
+                            : "Only the landlord of this property can review its tenants."}
+                </Alert>
+            ) : null}
+        </div>
+    );
+};
+
+/* ── Landlord: message & manage people who asked about this home ── */
+const TenantsTab = ({ propertyId, requests }) => {
+    const [selected, setSelected] = useState(requests[0]?.tenantInfo?.[0] || null);
+    const navigate = useNavigate();
+
+    if (requests.length === 0)
+        return <EmptyState icon="users" title="No tenants yet">When tenants send a rental request for this property, they will appear here so you can message them.</EmptyState>;
+
+    const selectedRequest = requests.find(r => r.tenantInfo?.[0]?._id === selected?._id);
+
+    return (
+        <div className="grid" style={{ gridTemplateColumns: "minmax(0,240px) minmax(0,1fr)", alignItems: "start" }}>
+            <div className="card" role="listbox" aria-label="Tenants">
+                {requests.map(r => {
+                    const t = r.tenantInfo?.[0];
+                    if (!t) return null;
+                    return (
+                        <button key={r._id} role="option" aria-selected={selected?._id === t._id} className="thread" aria-current={selected?._id === t._id}
+                            onClick={() => setSelected(t)}>
+                            <Avatar name={t.name} size={36} />
+                            <span className="grow"><span className="strong truncate" style={{ display: "block" }}>{t.name}</span><StatusBadge status={r.status} /></span>
+                        </button>
+                    );
+                })}
+            </div>
+            <div className="card card-pad">
+                {selected ? (
+                    <div className="stack stack-md">
+                        <div className="row"><Avatar name={selected.name} size={42} /><div><strong>{selected.name}</strong><div className="small muted">{selected.email}</div></div></div>
+                        {selectedRequest?.message && <Alert tone="info" title="Their message">“{selectedRequest.message}”</Alert>}
+                        <MessageComposer
+                            payload={{ propertyId, receiverId: selected._id }} label="Message" sendLabel="Send message"
+                            placeholder={`Hi ${selected.name.split(" ")[0]}, about your request…`} successText={`Message sent to ${selected.name.split(" ")[0]}.`}
+                        />
+                        {selectedRequest?.status === "Accepted" && (
+                            <Button variant="secondary" icon="receipt" onClick={() => navigate("/landlord/invoices", { state: { prefill: { propertyId, tenantId: selected._id, tenantName: selected.name, tenantEmail: selected.email } } })}>
+                                Create an invoice for {selected.name.split(" ")[0]}
+                            </Button>
                         )}
-                        <div>
-                            <div style={{ fontWeight:700, fontSize:"0.88rem", color:"#111" }}>
-                                {property.propertyType} · {property.area}
-                            </div>
-                            <div style={{ fontSize:"0.78rem", color:"#888", marginTop:2 }}>{property.address}</div>
-                            <div style={{ fontWeight:700, color:"#c0392b", fontSize:"0.9rem", marginTop:4 }}>
-                                ৳{property.monthlyRent?.toLocaleString()} <span style={{ fontWeight:400, color:"#aaa", fontSize:"0.75rem" }}>/month</span>
-                            </div>
-                        </div>
                     </div>
-
-                    {/* existing request status */}
-                    {rentRequest ? (
-                        <div style={{
-                            padding:"1rem", border:`1px solid ${rentRequest.status==="Accepted"?"#c8e6c9":rentRequest.status==="Rejected"?"#f5c6cb":"#fce09b"}`,
-                            background: rentRequest.status==="Accepted"?"#f0f8f0":rentRequest.status==="Rejected"?"#fdf0f0":"#fffbf0",
-                            marginBottom:"1rem"
-                        }}>
-                            <div style={{ fontWeight:700, fontSize:"0.88rem",
-                                color: rentRequest.status==="Accepted"?"#2e7d32":rentRequest.status==="Rejected"?"#c0392b":"#8a6914" }}>
-                                {rentRequest.status === "Accepted" ? "✅ Your request was accepted" :
-                                 rentRequest.status === "Rejected" ? "❌ Your request was rejected" :
-                                 "⏳ Request is pending review"}
-                            </div>
-                            <div style={{ fontSize:"0.78rem", color:"#888", marginTop:4 }}>
-                                {rentRequest.status === "Accepted" ? "The landlord can now generate an invoice for you." :
-                                 rentRequest.status === "Rejected" ? "You may send a new request." :
-                                 "The landlord will respond soon."}
-                            </div>
-                            {rentRequest.status === "Rejected" && (
-                                <button onClick={() => onSent(null)} style={{
-                                    marginTop:"0.7rem", background:"#111", color:"#fff", border:"none",
-                                    padding:"0.45rem 1rem", cursor:"pointer", fontSize:"0.75rem",
-                                    textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:600
-                                }}>Send New Request</button>
-                            )}
-                        </div>
-                    ) : property.availability !== "Available" ? (
-                        <div style={{ padding:"0.9rem", background:"#fdf0f0", border:"1px solid #f5c6cb", marginBottom:"1rem",
-                            fontSize:"0.85rem", color:"#c0392b", fontWeight:600 }}>
-                            ⚠️ This property is currently not available.
-                        </div>
-                    ) : (
-                        <>
-                            <div style={{ marginBottom:"0.5rem" }}>
-                                <label style={{ display:"block", marginBottom:"0.4rem", fontSize:"0.72rem",
-                                    fontWeight:600, color:"#888", textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                                    Message to Landlord <span style={{ color:"#bbb", textTransform:"none" }}>(optional)</span>
-                                </label>
-                                <textarea value={note} onChange={e => setNote(e.target.value)}
-                                    placeholder="Tell the landlord a bit about yourself..."
-                                    style={{ width:"100%", minHeight:90, padding:"0.65rem 0.9rem",
-                                        border:"1px solid #e0ddd8", borderRadius:2,
-                                        fontSize:"0.88rem", resize:"vertical", boxSizing:"border-box",
-                                        fontFamily:"inherit" }} />
-                            </div>
-                            {msg && <p style={{ fontSize:"0.82rem", marginBottom:"0.6rem",
-                                color: msg.startsWith("✅") ? "#2e7d32" : "#c0392b" }}>{msg}</p>}
-                            <button onClick={submit} disabled={busy} style={{
-                                width:"100%", background:"#111", color:"#fff", border:"none",
-                                padding:"0.75rem", cursor:busy?"not-allowed":"pointer",
-                                fontSize:"0.8rem", textTransform:"uppercase", letterSpacing:"0.08em",
-                                fontWeight:700, fontFamily:"inherit", opacity: busy ? 0.6 : 1
-                            }}>
-                                {busy ? "Sending…" : "Send Rental Request"}
-                            </button>
-                        </>
-                    )}
-                    {!rentRequest && msg && (
-                        <p style={{ fontSize:"0.82rem", marginTop:"0.5rem",
-                            color: msg.startsWith("✅") ? "#2e7d32" : "#c0392b" }}>{msg}</p>
-                    )}
-                </div>
+                ) : <p className="muted">Select a tenant to start a message.</p>}
             </div>
         </div>
     );
 };
 
-/* ══════════════════════════════════════════════
-   Main PropertyDetail Component
-══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════ */
 const PropertyDetail = ({ user }) => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
+    const toast = useToast();
+    const confirm = useConfirm();
 
-    const [property,  setProperty]  = useState(null);
-    const [reviews,   setReviews]   = useState([]);
-    const [activeImg, setActiveImg] = useState(0);
-    const [msg,       setMsg]       = useState("");
-    const [msgSent,   setMsgSent]   = useState("");
-    const [review,    setReview]    = useState({ rating:5, comment:"", targetId:"" });
-    const [reviewMsg, setReviewMsg] = useState("");
-    const [reportMsg, setReportMsg] = useState("");
-    const [tab,       setTab]       = useState("details"); // details | contact | message-tenant | reviews
-    const [rentRequest,    setRentRequest]    = useState(null);
-    const [showRentModal,  setShowRentModal]  = useState(false);
-    const [loginModal,     setLoginModal]     = useState(false);
-    // landlord → message tenant
-    const [propertyTenants,  setPropertyTenants]  = useState([]); // tenants who requested this property
-    const [selectedTenant,   setSelectedTenant]   = useState(null);
-    const [landlordMsg,      setLandlordMsg]      = useState("");
-    const [landlordMsgSent,  setLandlordMsgSent]  = useState("");
+    const { data: property, loading, error, reload } = useAsync(
+        () => singlePropertyAPI(id).then(r => r.data.data[0] || null), [id]
+    );
+    const landlord = property?.landlordInfo?.[0];
 
-    useEffect(() => {
-        singlePropertyAPI(id).then(res => {
-            const p = res.data.data[0];
-            setProperty(p);
-            if (p?.landlordInfo?.[0]?._id)
-                userReviewsAPI(p.landlordInfo[0]._id).then(r => setReviews(r.data.data || []));
-        });
-        if (user?.role === "tenant")
-            rentalRequestStatusAPI(id).then(r => setRentRequest(r.data.data)).catch(() => {});
-        if (user?.role === "landlord")
-            incomingRentalRequestsAPI().then(r => {
-                const requests = (r.data.data || []).filter(req => String(req.property) === String(id));
-                setPropertyTenants(requests);
-            }).catch(() => {});
-    }, [id]); // eslint-disable-line
+    const isTenant = user?.role === "tenant";
+    const isOwner = user?.role === "landlord" && landlord && String(landlord._id) === String(user._id || user.id);
 
-    const handleMessage = async () => {
-        if (!msg.trim()) return;
-        try {
-            await sendMessageAPI({ propertyId: id, receiverId: property.landlordInfo[0]._id, message: msg });
-            setMsgSent("✅ Message sent! Check your inbox."); setMsg("");
-        } catch { setMsgSent("❌ Failed to send message."); }
-    };
+    const { data: reviewData, reload: reloadReviews } = useAsync(
+        () => (landlord?._id ? userReviewsAPI(landlord._id).then(r => r.data.data || []) : Promise.resolve([])), [landlord?._id]
+    );
+    const reviews = useMemo(() => reviewData || [], [reviewData]);
+    const avg = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : null;
 
-    const handleLandlordMessage = async () => {
-        if (!landlordMsg.trim() || !selectedTenant) return;
-        setLandlordMsgSent("");
-        try {
-            await sendMessageAPI({ propertyId: id, receiverId: selectedTenant._id, message: landlordMsg });
-            setLandlordMsgSent("✅ Message sent to tenant!");
-            setLandlordMsg("");
-        } catch { setLandlordMsgSent("❌ Failed to send message."); }
-    };
-
-    const handleReport = async (type) => {
-        try {
-            const reportedEntity = type === "property" ? id : property.landlordInfo[0]._id;
-            await createReportAPI({ reportType: type === "property" ? "property" : "user", reportedEntity, reason: type === "property" ? "Fake/misleading listing" : "Bad behavior" });
-            setReportMsg("✅ Report submitted.");
-        } catch { setReportMsg("❌ Failed to submit report."); }
-    };
-
-    const handleReview = async (e) => {
-        e.preventDefault(); setReviewMsg("");
-        const isTenant = user?.role === "tenant";
-        const revieweeId = isTenant ? property.landlordInfo[0]._id : review.targetId;
-        const reviewType = isTenant ? "tenant-to-landlord" : "landlord-to-tenant";
-        if (!isTenant && !review.targetId) { setReviewMsg("Enter Tenant ID."); return; }
-        try {
-            await createReviewAPI({ revieweeId, propertyId: id, reviewType, rating: review.rating, comment: review.comment });
-            setReviewMsg("✅ Review submitted!");
-            userReviewsAPI(property.landlordInfo[0]._id).then(r => setReviews(r.data.data || []));
-        } catch (err) { setReviewMsg(err.response?.data?.message || "❌ Review failed."); }
-    };
-
-    if (!property) return (
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-            height:"80vh", flexDirection:"column", gap:"0.8rem", color:"#aaa" }}>
-            <div style={{ width:48, height:48, border:"2px solid #e8e4dc", borderTopColor:"#111",
-                borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
-            <p style={{ fontSize:"0.85rem", color:"#aaa" }}>Loading property…</p>
-        </div>
+    const { data: myRequest, setData: setMyRequest } = useAsync(
+        () => (isTenant ? rentalRequestStatusAPI(id).then(r => r.data.data) : Promise.resolve(null)), [id, isTenant]
+    );
+    const { data: ownerRequests } = useAsync(
+        () => (isOwner ? incomingRentalRequestsAPI().then(r => (r.data.data || []).filter(q => String(q.property) === String(id))) : Promise.resolve([])), [id, isOwner]
+    );
+    const acceptedTenants = useMemo(
+        () => (ownerRequests || []).filter(r => r.status === "Accepted").map(r => r.tenantInfo?.[0]).filter(Boolean), [ownerRequests]
     );
 
-    const landlord  = property.landlordInfo?.[0];
-    const isTenant  = user?.role === "tenant";
-    const isLandlord = user?.role === "landlord";
-    const images    = property.images || [];
-    const avgRating = reviews.length ? (reviews.reduce((s,r) => s+r.rating, 0) / reviews.length).toFixed(1) : null;
+    const [tab, setTab] = useState("overview");
+    const [modal, setModal] = useState(null); // request | login | report-listing | report-landlord
+    useDocumentTitle(property ? `${property.propertyType} in ${property.area}` : "Property");
 
-    const TABS = [
-        { id:"details",        label:"Details" },
-        { id:"contact",        label:"Contact Landlord" },
-        ...(isLandlord ? [{ id:"message-tenant", label:"Message Tenant" }] : []),
-        { id:"reviews",        label:`Reviews (${reviews.length})` },
+    const cancelRequest = useCallback(async () => {
+        const ok = await confirm({ title: "Cancel your request?", message: "The landlord won't see it any more. You can send a new one later.", confirmText: "Cancel request", tone: "danger" });
+        if (!ok) return;
+        try {
+            await cancelRentalRequestAPI(myRequest._id);
+            toast.success("Request cancelled.");
+            setMyRequest(null);
+        } catch (err) { toast.error(getErrorMessage(err)); }
+    }, [confirm, myRequest, setMyRequest, toast]);
+
+    useEffect(() => { setTab(location.state?.tab || "overview"); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    if (loading && !property) return <PageLoader label="Loading property…" />;
+    if (error || !property) {
+        return (
+            <div className="container page">
+                <ErrorState message={error || "This property may have been rented or removed."} onRetry={error ? reload : undefined} />
+                <div className="center mt-2"><Link to="/" className="btn btn-primary">Browse other homes</Link></div>
+            </div>
+        );
+    }
+
+    const available = property.availability === "Available";
+    const canReview = (isTenant && myRequest?.status === "Accepted") || (isOwner && acceptedTenants.length > 0);
+    const hasMap = property.location?.mapLink && /^https?:\/\//i.test(property.location.mapLink);
+    const guestPrompt = !user
+        ? { title: "Log in to continue", message: "Create a free account or log in as a Tenant to message the landlord and request this home." }
+        : { title: "Tenant account required", message: `You're logged in as a ${user.role}. Only Tenant accounts can request homes or message landlords – you can register a separate Tenant account with another email.` };
+
+    const needTenant = (action) => (isTenant ? action() : setModal("login"));
+
+    const tabs = [
+        { id: "overview", label: "Overview" },
+        { id: "reviews", label: `Reviews (${reviews.length})` },
+        ...(isOwner ? [{ id: "tenants", label: `Tenants${ownerRequests?.length ? ` (${ownerRequests.length})` : ""}` }] : [{ id: "contact", label: "Message landlord" }]),
     ];
 
     return (
-        <div style={{ background:"#fafaf8", minHeight:"100vh" }}>
+        <div className="container page">
+            <PageHeader
+                breadcrumbs={[{ label: "Rentals", to: "/" }, { label: property.area, to: `/?q=${encodeURIComponent(property.area)}` }, { label: property.propertyType }]}
+                title={`${property.propertyType} in ${property.area}`}
+                subtitle={<span className="row-wrap" style={{ gap: "0.5rem" }}><Icon name="pin" size={15} /> {property.address}{avg && <><span aria-hidden="true">·</span><Stars value={avg} /> {avg}</>}</span>}
+            />
 
-            {/* ── Breadcrumb ── */}
-            <div style={{ background:"#fff", borderBottom:"1px solid #f0ede8",
-                padding:"0.7rem 1rem", fontSize:"0.75rem", color:"#aaa",
-                display:"flex", alignItems:"center", gap:"0.5rem", flexWrap:"wrap" }}>
-                <span onClick={() => navigate("/")} style={{ cursor:"pointer", color:"#888" }}>Home</span>
-                <span>›</span>
-                <span>{property.area}</span>
-                <span>›</span>
-                <span style={{ color:"#111" }}>{property.propertyType}</span>
-            </div>
+            <div className="detail-layout">
+                <div className="stack stack-lg">
+                    <ImageGallery
+                        key={property._id} images={property.images || []} alt={`${property.propertyType} in ${property.area}`}
+                        badge={<span className="badge" style={{ position: "absolute", top: 12, left: 12, zIndex: 2, background: property.availability === "Available" ? "var(--success)" : "var(--dark)", color: "#fff" }}>{property.availability}</span>}
+                    />
 
-            <div style={{ maxWidth:1120, margin:"0 auto", padding:"2rem 1rem" }}>
-                <div className="property-detail-grid" style={{ display:"grid", gridTemplateColumns:"1fr 340px", gap:"2.5rem", alignItems:"flex-start" }}>
-
-                    {/* ────── LEFT ────── */}
                     <div>
-
-                        {/* ── Image gallery ── */}
-                        <div style={{ marginBottom:"2rem" }}>
-                            {images.length > 0 ? (
-                                <>
-                                    <div style={{ position:"relative", background:"#e8e4dc", aspectRatio:"16/9", overflow:"hidden" }}>
-                                        <img src={API_BASE + images[activeImg]} alt="property"
-                                            style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
-                                            onError={e => e.target.style.display="none"} />
-                                        {images.length > 1 && (
-                                            <>
-                                                <button onClick={() => setActiveImg(i => (i-1+images.length)%images.length)}
-                                                    style={{ position:"absolute", left:16, top:"50%", transform:"translateY(-50%)",
-                                                        background:"#fff", color:"#111", border:"1px solid #e8e4dc",
-                                                        width:36, height:36, borderRadius:2, cursor:"pointer",
-                                                        fontSize:"1rem", display:"flex", alignItems:"center", justifyContent:"center",
-                                                        padding:0, textTransform:"none", letterSpacing:0, fontWeight:400 }}>‹</button>
-                                                <button onClick={() => setActiveImg(i => (i+1)%images.length)}
-                                                    style={{ position:"absolute", right:16, top:"50%", transform:"translateY(-50%)",
-                                                        background:"#fff", color:"#111", border:"1px solid #e8e4dc",
-                                                        width:36, height:36, borderRadius:2, cursor:"pointer",
-                                                        fontSize:"1rem", display:"flex", alignItems:"center", justifyContent:"center",
-                                                        padding:0, textTransform:"none", letterSpacing:0, fontWeight:400 }}>›</button>
-                                                <div style={{ position:"absolute", bottom:12, right:16,
-                                                    background:"rgba(0,0,0,0.5)", color:"#fff", fontSize:"0.72rem",
-                                                    padding:"0.2rem 0.6rem" }}>
-                                                    {activeImg+1} / {images.length}
-                                                </div>
-                                            </>
-                                        )}
-                                        {/* availability ribbon */}
-                                        <div style={{ position:"absolute", top:16, left:0,
-                                            background: property.availability === "Available" ? "#2e7d32" : "#c0392b",
-                                            color:"#fff", fontSize:"0.7rem", fontWeight:700,
-                                            padding:"0.3rem 0.9rem", letterSpacing:"0.06em", textTransform:"uppercase" }}>
-                                            {property.availability}
-                                        </div>
-                                    </div>
-                                    {/* thumbnails */}
-                                    {images.length > 1 && (
-                                        <div style={{ display:"flex", gap:4, marginTop:4 }}>
-                                            {images.map((img, i) => (
-                                                <img key={i} src={API_BASE + img} alt=""
-                                                    onClick={() => setActiveImg(i)}
-                                                    style={{ width:80, height:56, objectFit:"cover", cursor:"pointer",
-                                                        outline: i===activeImg ? "2px solid #111" : "none",
-                                                        outlineOffset:1, opacity: i===activeImg ? 1 : 0.55,
-                                                        transition:"opacity 0.15s" }}
-                                                    onError={e => e.target.style.display="none"} />
-                                            ))}
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div style={{ background:"#e8e4dc", aspectRatio:"16/9",
-                                    display:"flex", alignItems:"center", justifyContent:"center",
-                                    color:"#bbb", fontSize:"3rem" }}>🏠</div>
-                            )}
-                        </div>
-
-                        {/* ── Title row ── */}
-                        <div style={{ marginBottom:"1.6rem" }}>
-                            <h1 style={{ fontSize:"1.8rem", fontWeight:700, color:"#111",
-                                letterSpacing:"-0.03em", lineHeight:1.2, marginBottom:"0.4rem" }}>
-                                {property.propertyType} in {property.area}
-                            </h1>
-                            <div style={{ fontSize:"0.85rem", color:"#888", display:"flex", alignItems:"center", gap:"0.6rem" }}>
-                                <span>📍 {property.address}</span>
-                                {avgRating && (
-                                    <>
-                                        <span style={{ color:"#ddd" }}>·</span>
-                                        <Stars n={avgRating} />
-                                        <span style={{ color:"#888" }}>{avgRating}</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* ── Tab nav ── */}
-                        <div style={{ display:"flex", borderBottom:"1px solid #e8e4dc", marginBottom:"1.8rem", flexWrap:"wrap" }}>
-                            {TABS.map(t => (
-                                <button key={t.id} onClick={() => {
-                                    if (t.id === "contact" && !isTenant) { setLoginModal(true); return; }
-                                    setTab(t.id);
-                                }} style={{
-                                    background:"none", border:"none", borderBottom: tab===t.id ? "2px solid #111" : "2px solid transparent",
-                                    padding:"0.65rem 1rem", cursor:"pointer", fontSize:"0.78rem",
-                                    fontWeight: tab===t.id ? 700 : 500, color: tab===t.id ? "#111" : "#888",
-                                    marginBottom:"-1px", textTransform:"uppercase", letterSpacing:"0.06em",
-                                    transition:"color 0.15s", whiteSpace:"nowrap"
-                                }}>{t.label}</button>
+                        <div className="tabs" role="tablist">
+                            {tabs.map(t => (
+                                <button key={t.id} role="tab" className="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>
                             ))}
                         </div>
 
-                        {/* ── DETAILS TAB ── */}
-                        {tab === "details" && (
-                            <div>
-                                {/* key specs — 2-column definition list */}
-                                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0",
-                                    border:"1px solid #e8e4dc", marginBottom:"1.8rem" }}>
-                                    {[
-                                        ["Monthly Rent",     "৳" + property.monthlyRent?.toLocaleString()],
-                                        ["Advance Deposit",  property.advanceDeposit ? "৳" + property.advanceDeposit?.toLocaleString() : "—"],
-                                        ["Property Type",    property.propertyType],
-                                        ["Distance",         property.distanceFromMainRoad || "—"],
-                                    ].map(([label, val], i) => (
-                                        <div key={label} style={{
-                                            padding:"0.9rem 1.1rem",
-                                            borderBottom:"1px solid #f0ede8",
-                                            borderRight: i%2===0 ? "1px solid #f0ede8" : "none",
-                                            background:"#fff"
-                                        }}>
-                                            <div style={{ fontSize:"0.68rem", color:"#aaa", fontWeight:600,
-                                                textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>{label}</div>
-                                            <div style={{ fontSize:"0.95rem", fontWeight:700, color:"#111" }}>{val}</div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* facilities */}
-                                {property.facilities?.length > 0 && (
-                                    <div style={{ marginBottom:"1.8rem" }}>
-                                        <h3 style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase",
-                                            letterSpacing:"0.08em", color:"#888", marginBottom:"0.8rem" }}>Facilities</h3>
-                                        <div style={{ display:"flex", flexWrap:"wrap", gap:"0.45rem" }}>
-                                            {property.facilities.map(f => (
-                                                <span key={f} style={{ background:"#fff", border:"1px solid #e8e4dc",
-                                                    fontSize:"0.8rem", padding:"0.3rem 0.8rem", color:"#555", fontWeight:500 }}>
-                                                    {f}
-                                                </span>
-                                            ))}
-                                        </div>
+                        <div className="mt-3" role="tabpanel">
+                            {tab === "overview" && (
+                                <div className="stack stack-lg">
+                                    <div className="spec-grid">
+                                        {[
+                                            ["Monthly rent", money(property.monthlyRent)],
+                                            ["Advance deposit", property.advanceDeposit > 0 ? money(property.advanceDeposit) : "None"],
+                                            ["Property type", property.propertyType],
+                                            ["Distance from main road", property.distanceFromMainRoad || "Not specified"],
+                                        ].map(([l, v]) => <div className="spec" key={l}><div className="spec-label">{l}</div><div className="spec-value">{v}</div></div>)}
                                     </div>
-                                )}
 
-                                {/* map */}
-                                {property.location?.mapLink && (
-                                    <a href={property.location.mapLink} target="_blank" rel="noreferrer"
-                                        style={{ display:"inline-flex", alignItems:"center", gap:"0.5rem",
-                                            background:"#111", color:"#fff", padding:"0.6rem 1.2rem",
-                                            fontSize:"0.78rem", textDecoration:"none",
-                                            fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em",
-                                            marginBottom:"1.5rem" }}>
-                                        📍 View on Google Maps
-                                    </a>
-                                )}
+                                    {property.facilities?.length > 0 && (
+                                        <section>
+                                            <h3 className="mb-1">Facilities</h3>
+                                            <div className="row-wrap">{property.facilities.map(f => <span className="badge badge-info" key={f}><Icon name="check" size={12} /> {f}</span>)}</div>
+                                        </section>
+                                    )}
 
-                                {/* report */}
-                                {user && isTenant && (
-                                    <div style={{ display:"flex", gap:"0.6rem", flexWrap:"wrap", marginTop:"0.5rem" }}>
-                                        <button onClick={() => handleReport("property")} style={{
-                                            background:"none", border:"1px solid #e8e4dc", color:"#888",
-                                            fontSize:"0.74rem", padding:"0.4rem 0.9rem", cursor:"pointer",
-                                            textTransform:"uppercase", letterSpacing:"0.04em" }}>
-                                            Report Listing
-                                        </button>
-                                        {landlord && (
-                                            <button onClick={() => handleReport("user")} style={{
-                                                background:"none", border:"1px solid #e8e4dc", color:"#888",
-                                                fontSize:"0.74rem", padding:"0.4rem 0.9rem", cursor:"pointer",
-                                                textTransform:"uppercase", letterSpacing:"0.04em" }}>
-                                                Report Landlord
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                                {reportMsg && <p style={{ marginTop:"0.5rem", fontSize:"0.8rem",
-                                    color: reportMsg.startsWith("✅") ? "#2e7d32" : "#c0392b" }}>{reportMsg}</p>}
-                            </div>
-                        )}
-
-                        {/* ── CONTACT TAB ── */}
-                        {tab === "contact" && (
-                            <div>
-                                {!user ? (
-                                    <div style={{ background:"#fff", border:"1px solid #e8e4dc",
-                                        padding:"2.5rem", textAlign:"center" }}>
-                                        <p style={{ marginBottom:"1.2rem", fontSize:"0.88rem" }}>
-                                            You must be logged in as a <strong>Tenant</strong> to message this landlord.
-                                        </p>
-                                        <div style={{ display:"flex", gap:"0.6rem", justifyContent:"center" }}>
-                                            <a href="/login" style={{ background:"#111", color:"#fff",
-                                                padding:"0.6rem 1.4rem", textDecoration:"none",
-                                                fontSize:"0.78rem", fontWeight:600, textTransform:"uppercase",
-                                                letterSpacing:"0.06em" }}>Login</a>
-                                            <a href="/register" style={{ background:"#fff", color:"#111",
-                                                border:"1px solid #e8e4dc", padding:"0.6rem 1.4rem",
-                                                textDecoration:"none", fontSize:"0.78rem", fontWeight:600,
-                                                textTransform:"uppercase", letterSpacing:"0.06em" }}>Register</a>
-                                        </div>
-                                    </div>
-                                ) : isTenant ? (
-                                    <div style={{ background:"#fff", border:"1px solid #e8e4dc", padding:"1.5rem" }}>
-                                        <h3 style={{ fontSize:"0.78rem", fontWeight:700, textTransform:"uppercase",
-                                            letterSpacing:"0.08em", color:"#888", marginBottom:"0.9rem" }}>
-                                            Message Landlord
-                                        </h3>
-                                        <textarea value={msg} onChange={e => setMsg(e.target.value)}
-                                            placeholder="Hi, I'm interested in this property…"
-                                            style={{ width:"100%", minHeight:100, padding:"0.7rem 0.9rem",
-                                                border:"1px solid #e0ddd8", borderRadius:2, fontSize:"0.88rem",
-                                                resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }} />
-                                        <button onClick={handleMessage} style={{
-                                            marginTop:"0.7rem", background:"#111", color:"#fff",
-                                            padding:"0.65rem 1.6rem", fontSize:"0.78rem",
-                                            textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700 }}>
-                                            Send Message
-                                        </button>
-                                        {msgSent && <p style={{ marginTop:"0.6rem", fontSize:"0.82rem",
-                                            color: msgSent.startsWith("✅") ? "#2e7d32" : "#c0392b" }}>{msgSent}</p>}
-                                    </div>
-                                ) : user?.role === "marketplace" ? (
-                                    <div style={{ background:"#fff", border:"1px solid #e8e4dc", padding:"2rem", textAlign:"center" }}>
-                                        <p style={{ marginBottom:"1rem", fontSize:"0.88rem" }}>
-                                            Register as a <strong>Tenant</strong> to message landlords.
-                                        </p>
-                                        <a href="/register" style={{ background:"#111", color:"#fff",
-                                            padding:"0.65rem 1.6rem", textDecoration:"none", display:"inline-block",
-                                            fontSize:"0.78rem", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" }}>
-                                            Register as Tenant →
+                                    {hasMap && (
+                                        <a className="btn btn-secondary" href={property.location.mapLink} target="_blank" rel="noopener noreferrer" style={{ alignSelf: "flex-start" }}>
+                                            <Icon name="pin" size={16} /> View on map <Icon name="external" size={14} />
                                         </a>
-                                    </div>
-                                ) : (
-                                    <div style={{ background:"#fff", border:"1px solid #e8e4dc", padding:"1.5rem", color:"#888", fontSize:"0.88rem" }}>
-                                        Only tenants can message landlords.
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                    )}
 
-                        {/* ── MESSAGE TENANT TAB (landlord only) ── */}
-                        {tab === "message-tenant" && isLandlord && (
-                            <div>
-                                {propertyTenants.length === 0 ? (
-                                    <div style={{ background:"#fff", border:"1px solid #e8e4dc",
-                                        padding:"2.5rem", textAlign:"center" }}>
-                                        <div style={{ fontSize:"2.5rem", marginBottom:"0.6rem" }}>📭</div>
-                                        <h3 style={{ fontWeight:700, color:"#111", marginBottom:"0.4rem", fontSize:"1rem" }}>No tenants yet</h3>
-                                        <p style={{ fontSize:"0.85rem", color:"#aaa" }}>
-                                            Tenants who send a rental request for this property will appear here.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="tenant-msg-grid" style={{ display:"grid", gridTemplateColumns:"220px 1fr", gap:"1.2rem", alignItems:"flex-start" }}>
-
-                                        {/* Tenant list */}
-                                        <div style={{ background:"#fff", border:"1px solid #e8e4dc" }}>
-                                            <div style={{ padding:"0.65rem 1rem", borderBottom:"1px solid #f0ede8",
-                                                fontSize:"0.68rem", fontWeight:700, textTransform:"uppercase",
-                                                letterSpacing:"0.08em", color:"#888" }}>
-                                                Tenants ({propertyTenants.length})
-                                            </div>
-                                            {propertyTenants.map(req => {
-                                                const t = req.tenantInfo?.[0];
-                                                if (!t) return null;
-                                                const isSelected = selectedTenant?._id === t._id;
-                                                return (
-                                                    <div key={req._id}
-                                                        onClick={() => { setSelectedTenant(t); setLandlordMsgSent(""); setLandlordMsg(""); }}
-                                                        style={{ display:"flex", alignItems:"center", gap:"0.65rem",
-                                                            padding:"0.75rem 1rem", cursor:"pointer",
-                                                            background: isSelected ? "#fafaf8" : "#fff",
-                                                            borderLeft: isSelected ? "3px solid #111" : "3px solid transparent",
-                                                            borderBottom:"1px solid #f5f5f5",
-                                                            transition:"all 0.12s" }}>
-                                                        <Avatar name={t.name} size={34} />
-                                                        <div style={{ minWidth:0 }}>
-                                                            <div style={{ fontWeight:700, fontSize:"0.82rem", color:"#111",
-                                                                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                                                                {t.name}
-                                                            </div>
-                                                            <div style={{ fontSize:"0.68rem", color:"#aaa", marginTop:1 }}>
-                                                                {t.email}
-                                                            </div>
-                                                            <span style={{
-                                                                display:"inline-block", marginTop:3,
-                                                                fontSize:"0.62rem", fontWeight:700,
-                                                                padding:"0.1rem 0.45rem",
-                                                                borderRadius:2,
-                                                                background: req.status==="Accepted"?"#f0f8f0":req.status==="Rejected"?"#fdf0f0":"#fffbf0",
-                                                                color: req.status==="Accepted"?"#2e7d32":req.status==="Rejected"?"#c0392b":"#8a6914",
-                                                            }}>{req.status}</span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                    {user && !isOwner && ["tenant", "landlord", "marketplace"].includes(user.role) && (
+                                        <div className="row-wrap">
+                                            <Button variant="ghost" size="sm" icon="flag" onClick={() => setModal("report-listing")}>Report this listing</Button>
+                                            {landlord && <Button variant="ghost" size="sm" icon="flag" onClick={() => setModal("report-landlord")}>Report landlord</Button>}
                                         </div>
-
-                                        {/* Message panel */}
-                                        <div>
-                                            {!selectedTenant ? (
-                                                <div style={{ background:"#fff", border:"1px solid #e8e4dc",
-                                                    padding:"2.5rem", textAlign:"center", color:"#aaa", fontSize:"0.85rem" }}>
-                                                    ← Select a tenant to message
-                                                </div>
-                                            ) : (
-                                                <div style={{ background:"#fff", border:"1px solid #e8e4dc", padding:"1.4rem" }}>
-                                                    {/* Selected tenant header */}
-                                                    <div style={{ display:"flex", alignItems:"center", gap:"0.75rem",
-                                                        marginBottom:"1rem", paddingBottom:"0.9rem",
-                                                        borderBottom:"1px solid #f0ede8" }}>
-                                                        <Avatar name={selectedTenant.name} size={38} />
-                                                        <div>
-                                                            <div style={{ fontWeight:700, color:"#111", fontSize:"0.9rem" }}>
-                                                                {selectedTenant.name}
-                                                            </div>
-                                                            <div style={{ fontSize:"0.74rem", color:"#aaa" }}>
-                                                                {selectedTenant.email}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <h3 style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase",
-                                                        letterSpacing:"0.08em", color:"#888", marginBottom:"0.7rem" }}>
-                                                        Send Message
-                                                    </h3>
-                                                    <textarea
-                                                        value={landlordMsg}
-                                                        onChange={e => setLandlordMsg(e.target.value)}
-                                                        placeholder={`Hi ${selectedTenant.name.split(" ")[0]}, regarding your rental request…`}
-                                                        style={{ width:"100%", minHeight:110, padding:"0.7rem 0.9rem",
-                                                            border:"1px solid #e0ddd8", borderRadius:2, fontSize:"0.88rem",
-                                                            resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }}
-                                                    />
-                                                    <button onClick={handleLandlordMessage}
-                                                        disabled={!landlordMsg.trim()}
-                                                        style={{ marginTop:"0.7rem", background:"#111", color:"#fff",
-                                                            padding:"0.65rem 1.6rem", fontSize:"0.78rem",
-                                                            textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700,
-                                                            opacity: landlordMsg.trim() ? 1 : 0.5, cursor: landlordMsg.trim() ? "pointer" : "not-allowed" }}>
-                                                        Send Message
-                                                    </button>
-                                                    {landlordMsgSent && (
-                                                        <p style={{ marginTop:"0.6rem", fontSize:"0.82rem",
-                                                            color: landlordMsgSent.startsWith("✅") ? "#2e7d32" : "#c0392b" }}>
-                                                            {landlordMsgSent}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* ── REVIEWS TAB ── */}
-                        {tab === "reviews" && (                            <div>
-                                {/* avg rating */}
-                                {avgRating && (
-                                    <div style={{ display:"flex", alignItems:"center", gap:"1rem",
-                                        padding:"1.2rem 1.4rem", background:"#fff",
-                                        border:"1px solid #e8e4dc", marginBottom:"1.2rem" }}>
-                                        <div style={{ fontSize:"2.8rem", fontWeight:700, color:"#111", lineHeight:1 }}>{avgRating}</div>
-                                        <div>
-                                            <Stars n={avgRating} />
-                                            <div style={{ fontSize:"0.76rem", color:"#aaa", marginTop:2 }}>
-                                                Based on {reviews.length} review{reviews.length!==1?"s":""}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* review list */}
-                                <div style={{ display:"flex", flexDirection:"column", gap:1, marginBottom:"1.5rem", background:"#e8e4dc" }}>
-                                    {reviews.length === 0 ? (
-                                        <div style={{ background:"#fff", padding:"2rem", textAlign:"center",
-                                            color:"#aaa", fontSize:"0.85rem" }}>
-                                            No reviews yet.
-                                        </div>
-                                    ) : reviews.map(r => (
-                                        <div key={r._id} style={{ background:"#fff", padding:"1rem 1.2rem" }}>
-                                            <div style={{ display:"flex", gap:"0.75rem", alignItems:"flex-start" }}>
-                                                <Avatar name={r.reviewerInfo?.[0]?.name} size={36} />
-                                                <div style={{ flex:1 }}>
-                                                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                                                        <span style={{ fontWeight:700, fontSize:"0.85rem" }}>
-                                                            {r.reviewerInfo?.[0]?.name || "Anonymous"}
-                                                        </span>
-                                                        <span style={{ fontSize:"0.72rem", color:"#aaa" }}>
-                                                            {new Date(r.createdAt).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" })}
-                                                        </span>
-                                                    </div>
-                                                    <Stars n={r.rating} />
-                                                    {r.comment && <p style={{ fontSize:"0.84rem", color:"#555", marginTop:"0.35rem", lineHeight:1.6 }}>{r.comment}</p>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* submit review */}
-                                {user && (isTenant || isLandlord) && (
-                                    <div style={{ background:"#fff", border:"1px solid #e8e4dc", padding:"1.4rem" }}>
-                                        <h3 style={{ fontSize:"0.72rem", fontWeight:700, textTransform:"uppercase",
-                                            letterSpacing:"0.08em", color:"#888", marginBottom:"0.9rem" }}>
-                                            {isTenant ? "Rate this Landlord" : "Rate a Tenant"}
-                                        </h3>
-                                        {reviewMsg && <p style={{ fontSize:"0.82rem", marginBottom:"0.6rem",
-                                            color: reviewMsg.startsWith("✅") ? "#2e7d32" : "#c0392b" }}>{reviewMsg}</p>}
-                                        <form onSubmit={handleReview} style={{ gap:"0.7rem" }}>
-                                            {isLandlord && (
-                                                <input placeholder="Enter Tenant ID" value={review.targetId}
-                                                    onChange={e => setReview({ ...review, targetId:e.target.value })} required />
-                                            )}
-                                            <div style={{ display:"flex", gap:"0.3rem", marginBottom:"0.5rem" }}>
-                                                {[1,2,3,4,5].map(n => (
-                                                    <button key={n} type="button" onClick={() => setReview({...review, rating:n})} style={{
-                                                        background:"none", border:"none", cursor:"pointer",
-                                                        fontSize:"1.6rem", color: n<=review.rating ? "#c0392b" : "#e0ddd8",
-                                                        padding:"0.2rem", textTransform:"none", letterSpacing:0,
-                                                        transition:"color 0.1s" }}>★</button>
-                                                ))}
-                                            </div>
-                                            <textarea placeholder="Share your experience…" value={review.comment}
-                                                onChange={e => setReview({...review, comment:e.target.value})}
-                                                style={{ marginBottom:"0.6rem" }} />
-                                            <button type="submit" style={{
-                                                background:"#111", color:"#fff", padding:"0.6rem 1.4rem",
-                                                fontSize:"0.78rem", textTransform:"uppercase", letterSpacing:"0.08em",
-                                                fontWeight:700 }}>
-                                                Submit Review
-                                            </button>
-                                        </form>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ────── RIGHT sticky panel ────── */}
-                    <div style={{ position:"sticky", top:72 }}>
-                        {/* Price card */}
-                        <div style={{ background:"#fff", border:"1px solid #e8e4dc",
-                            padding:"1.6rem", marginBottom:4 }}>
-                            <div style={{ fontWeight:800, fontSize:"1.9rem", color:"#111",
-                                letterSpacing:"-0.03em", lineHeight:1 }}>
-                                ৳{property.monthlyRent?.toLocaleString()}
-                                <span style={{ fontWeight:400, fontSize:"0.85rem", color:"#aaa", marginLeft:4 }}>/month</span>
-                            </div>
-                            {property.advanceDeposit && (
-                                <div style={{ fontSize:"0.8rem", color:"#888", marginTop:4 }}>
-                                    Deposit: ৳{property.advanceDeposit?.toLocaleString()}
-                                </div>
-                            )}
-
-                            {/* specs mini-list */}
-                            <div style={{ borderTop:"1px solid #f0ede8", marginTop:"1rem", paddingTop:"1rem",
-                                display:"flex", flexDirection:"column", gap:"0.4rem" }}>
-                                {[
-                                    ["Type",   property.propertyType],
-                                    ["Area",   property.area],
-                                    ["Status", property.availability],
-                                    property.distanceFromMainRoad ? ["Distance", property.distanceFromMainRoad] : null
-                                ].filter(Boolean).map(([l,v]) => (
-                                    <div key={l} style={{ display:"flex", justifyContent:"space-between",
-                                        fontSize:"0.82rem" }}>
-                                        <span style={{ color:"#aaa" }}>{l}</span>
-                                        <span style={{ fontWeight:600, color: l==="Status" ? (v==="Available"?"#2e7d32":"#c0392b") : "#111" }}>{v}</span>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* CTA buttons */}
-                            {isTenant && property.availability === "Available" && (
-                                <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:"1.2rem" }}>
-                                    <button onClick={() => setTab("contact")} style={{
-                                        width:"100%", background:"#fff", color:"#111",
-                                        border:"1px solid #111", padding:"0.7rem",
-                                        fontSize:"0.78rem", textTransform:"uppercase",
-                                        letterSpacing:"0.08em", fontWeight:700, cursor:"pointer" }}>
-                                        Message Landlord
-                                    </button>
-                                    {/* Request to Rent — status pill or button */}
-                                    {rentRequest ? (
-                                        <div style={{
-                                            textAlign:"center", fontSize:"0.78rem", fontWeight:600,
-                                            padding:"0.5rem", border:`1px solid ${rentRequest.status==="Accepted"?"#c8e6c9":rentRequest.status==="Rejected"?"#f5c6cb":"#fce09b"}`,
-                                            background: rentRequest.status==="Accepted"?"#f0f8f0":rentRequest.status==="Rejected"?"#fdf0f0":"#fffbf0",
-                                            color: rentRequest.status==="Accepted"?"#2e7d32":rentRequest.status==="Rejected"?"#c0392b":"#8a6914",
-                                            cursor: rentRequest.status==="Rejected" ? "pointer" : "default"
-                                        }} onClick={() => rentRequest.status==="Rejected" && setShowRentModal(true)}>
-                                            {rentRequest.status==="Accepted" ? "✅ Request Accepted" :
-                                             rentRequest.status==="Rejected" ? "❌ Rejected — Send New Request" :
-                                             "⏳ Request Pending"}
-                                        </div>
-                                    ) : (
-                                        <button onClick={() => setShowRentModal(true)} style={{
-                                            width:"100%", background:"#111", color:"#fff",
-                                            border:"none", padding:"0.7rem",
-                                            fontSize:"0.78rem", textTransform:"uppercase",
-                                            letterSpacing:"0.08em", fontWeight:700, cursor:"pointer" }}>
-                                            Request to Rent
-                                        </button>
                                     )}
                                 </div>
                             )}
-                            {/* Non-tenant prompt */}
-                            {!isTenant && property.availability === "Available" && (
-                                <button onClick={() => setLoginModal(true)} style={{
-                                    marginTop:"1.2rem", width:"100%", background:"#111", color:"#fff",
-                                    border:"none", padding:"0.7rem", fontSize:"0.78rem",
-                                    textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, cursor:"pointer" }}>
-                                    🔒 Login to Rent
-                                </button>
-                            )}
-                            {/* Landlord quick-message button */}
-                            {isLandlord && (
-                                <button onClick={() => setTab("message-tenant")} style={{
-                                    marginTop:"0.6rem", width:"100%", background:"#fff", color:"#111",
-                                    border:"1px solid #111", padding:"0.7rem", fontSize:"0.78rem",
-                                    textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:700, cursor:"pointer" }}>
-                                    ✉️ Message Tenant
-                                </button>
-                            )}
-                            <button onClick={() => navigate(-1)} style={{
-                                marginTop:8, width:"100%", background:"none",
-                                border:"1px solid #e8e4dc", color:"#888",
-                                padding:"0.55rem", fontSize:"0.74rem",
-                                textTransform:"uppercase", letterSpacing:"0.05em", cursor:"pointer" }}>
-                                ← Back
-                            </button>
-                        </div>
 
-                        {/* Landlord card */}
-                        {landlord && (
-                            <div style={{ background:"#fff", border:"1px solid #e8e4dc", padding:"1.2rem" }}>
-                                <div style={{ fontSize:"0.68rem", color:"#aaa", fontWeight:700,
-                                    textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"0.8rem" }}>
-                                    Listed By
-                                </div>
-                                <div style={{ display:"flex", alignItems:"center", gap:"0.75rem" }}>
-                                    <Avatar name={landlord.name} size={40} />
-                                    <div>
-                                        <div style={{ fontWeight:700, color:"#111", fontSize:"0.9rem" }}>{landlord.name}</div>
-                                        <div style={{ fontSize:"0.74rem", color:"#aaa" }}>{landlord.email}</div>
-                                        {avgRating && (
-                                            <div style={{ display:"flex", alignItems:"center", gap:4, marginTop:2 }}>
-                                                <Stars n={avgRating} />
-                                                <span style={{ fontSize:"0.74rem", color:"#aaa" }}>{avgRating}</span>
-                                            </div>
-                                        )}
+                            {tab === "reviews" && (
+                                <ReviewsTab
+                                    property={property} landlord={landlord} reviews={reviews} avg={avg} user={user}
+                                    canReview={canReview} acceptedTenants={acceptedTenants} onReviewed={() => reloadReviews(true)}
+                                />
+                            )}
+
+                            {tab === "contact" && (
+                                isTenant && landlord ? (
+                                    <div className="card card-pad">
+                                        <h3 className="mb-1">Message {landlord.name.split(" ")[0]}</h3>
+                                        <p className="muted small mb-2">Ask about availability, viewing times or anything else. Replies arrive in your inbox.</p>
+                                        <MessageComposer
+                                            payload={{ propertyId: property._id, receiverId: landlord._id }}
+                                            placeholder="Hi, is this home still available? I'd like to arrange a visit…"
+                                        />
                                     </div>
-                                </div>
-                            </div>
-                        )}
+                                ) : (
+                                    <div className="card card-pad center">
+                                        <div className="empty-icon"><Icon name="lock" size={26} /></div>
+                                        <h3>{user ? "Only tenants can message landlords" : "Log in to message the landlord"}</h3>
+                                        <p className="muted mt-1 mb-2">{guestPrompt.message}</p>
+                                        <div className="row" style={{ justifyContent: "center" }}>
+                                            {!user && <Link to="/login" state={{ from: `/property/${id}` }} className="btn btn-secondary">Log in</Link>}
+                                            <Link to="/register" className="btn btn-primary">Sign up as a tenant</Link>
+                                        </div>
+                                    </div>
+                                )
+                            )}
+
+                            {tab === "tenants" && isOwner && <TenantsTab propertyId={property._id} requests={ownerRequests || []} />}
+                        </div>
                     </div>
                 </div>
+
+                <aside className="sticky-panel stack stack-md" aria-label="Rent this property">
+                    <div className="card card-pad">
+                        <div className="price-big">{money(property.monthlyRent)} <small>/ month</small></div>
+                        {property.advanceDeposit > 0 && <p className="small muted mt-1">+ {money(property.advanceDeposit)} advance deposit</p>}
+
+                        <div className="mt-2">
+                            <div className="kv"><span>Type</span><span>{property.propertyType}</span></div>
+                            <div className="kv"><span>Area</span><span>{property.area}</span></div>
+                            <div className="kv"><span>Status</span><span><StatusBadge status={property.availability} /></span></div>
+                        </div>
+
+                        <div className="stack stack-sm mt-2">
+                            {isOwner ? (<>
+                                <Link to={`/landlord/edit-property/${property._id}`} className="btn btn-primary btn-block"><Icon name="edit" size={16} /> Edit this listing</Link>
+                                <Button variant="secondary" block icon="users" onClick={() => setTab("tenants")}>View tenants &amp; requests</Button>
+                            </>) : isTenant && myRequest ? (<>
+                                <div className={`alert alert-${myRequest.status === "Accepted" ? "success" : myRequest.status === "Rejected" ? "error" : "warning"}`} role="status">
+                                    <Icon name={myRequest.status === "Accepted" ? "check-circle" : myRequest.status === "Rejected" ? "alert-circle" : "clock"} size={18} />
+                                    <div>
+                                        <div className="alert-title">{myRequest.status === "Accepted" ? "Request accepted" : myRequest.status === "Rejected" ? "Request declined" : "Request pending"}</div>
+                                        <div className="small">
+                                            {myRequest.status === "Accepted" && "The landlord can now send you rent invoices."}
+                                            {myRequest.status === "Pending" && "Waiting for the landlord to respond."}
+                                            {myRequest.status === "Rejected" && (available ? "You can send a new request." : "This home is no longer available.")}
+                                        </div>
+                                    </div>
+                                </div>
+                                {myRequest.status === "Pending" && <Button variant="danger-outline" block onClick={cancelRequest}>Cancel request</Button>}
+                                {myRequest.status === "Rejected" && available && <Button block onClick={() => setModal("request")}>Send a new request</Button>}
+                                {myRequest.status === "Accepted" && <Link to="/tenant/payments" className="btn btn-secondary btn-block"><Icon name="card" size={16} /> View my invoices</Link>}
+                                <Button variant="secondary" block icon="chat" onClick={() => setTab("contact")}>Message landlord</Button>
+                            </>) : available ? (<>
+                                <Button size="lg" block icon="key" onClick={() => needTenant(() => setModal("request"))}>Request to rent</Button>
+                                <Button variant="secondary" block icon="chat" onClick={() => needTenant(() => setTab("contact"))}>Message landlord</Button>
+                                {!isTenant && <p className="xs muted center">{user ? "Tenant account needed to request this home." : "Free account needed – takes a minute."}</p>}
+                            </>) : (
+                                <Alert tone="warning">This home is currently rented. Browse similar homes below.</Alert>
+                            )}
+                            <Button variant="ghost" icon="arrow-left" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/"))}>Back to results</Button>
+                        </div>
+                    </div>
+
+                    {landlord && (
+                        <div className="card card-pad">
+                            <div className="eyebrow mb-1" style={{ color: "var(--muted)" }}>Listed by</div>
+                            <div className="row">
+                                <Avatar name={landlord.name} size={46} />
+                                <div>
+                                    <strong>{landlord.name}</strong>
+                                    <div className="small muted">Member since {fmtDate(landlord.createdAt, { month: "short", year: "numeric" })}</div>
+                                    {avg && <div className="small"><Stars value={avg} /> {avg} ({reviews.length})</div>}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </aside>
             </div>
 
-            {/* ── Rent Request Modal ── */}
-            {showRentModal && isTenant && (
-                <RentRequestModal
-                    property={property}
-                    rentRequest={rentRequest}
-                    onClose={() => setShowRentModal(false)}
-                    onSent={(req) => {
-                        setRentRequest(req);
-                        if (req) setShowRentModal(false);
-                    }}
-                />
+            {modal === "request" && isTenant && (
+                <RequestModal property={property} onClose={() => setModal(null)} onSent={(req) => { setMyRequest(req); setModal(null); }} />
             )}
-
-            {/* ── Login/Role Prompt Modal ── */}
-            {loginModal && (
-                <LoginPromptModal
-                    onClose={() => setLoginModal(false)}
-                    title={!user ? "Login Required" : "Tenant Account Required"}
-                    message={!user
-                        ? "You need to log in as a Tenant to contact landlords and request rentals. Register for free or log in to continue."
-                        : `You're logged in as a ${user.role}. Only Tenant accounts can message landlords or request rentals. Register a Tenant account to proceed.`
-                    }
-                />
-            )}
-
-            <style>{`
-                @keyframes spin { to { transform: rotate(360deg); } }
-                @media (max-width: 768px) {
-                    .property-detail-grid { grid-template-columns: 1fr !important; gap: 1.5rem !important; }
-                    .property-detail-grid > div:last-child { position: static !important; }
-                    .tenant-msg-grid { grid-template-columns: 1fr !important; }
-                }
-            `}</style>
+            {modal === "login" && <LoginPromptModal onClose={() => setModal(null)} title={guestPrompt.title} message={guestPrompt.message} cta={user ? "register" : "login"} />}
+            {modal === "report-listing" && <ReportModal type="property" entityId={property._id} subject={`${property.propertyType} in ${property.area}`} onClose={() => setModal(null)} />}
+            {modal === "report-landlord" && landlord && <ReportModal type="user" entityId={landlord._id} subject={landlord.name} onClose={() => setModal(null)} />}
         </div>
     );
 };

@@ -1,7 +1,9 @@
-const express = require("express");
+const express   = require("express");
+const rateLimit = require("express-rate-limit");
 let router = express.Router();
 
 const authVerification  = require("../middlewares/authVerification");
+const optionalAuth      = require("../middlewares/optionalAuth");
 const adminVerification = require("../middlewares/adminVerification");
 const fileUploads       = require("../middlewares/fileUploads");
 
@@ -15,32 +17,42 @@ const reportController        = require("../controllers/reportController");
 const adminController         = require("../controllers/adminController");
 const rentalRequestController = require("../controllers/rentalRequestController");
 
+// Slow down password guessing / account spam.
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+    message: { success: false, message: "Too many attempts. Please wait a few minutes and try again." }
+});
+
 // AUTH / USER
-router.post("/register",                             userController.register);
-router.post("/login",                                userController.login);
-router.get("/logout",         authVerification,      userController.logout);
-router.get("/profile",        authVerification,      userController.profile);
-router.post("/update-profile",authVerification,      userController.updateProfile);
-router.post("/file-upload",   authVerification,      fileUploads.single("file"), userController.uploadFile);
-router.get("/user-profile/:userId",                  userController.publicProfile);
-router.get("/search-tenants", authVerification,      userController.searchTenants);
+router.post("/register",                               authLimiter, userController.register);
+router.post("/login",                                  authLimiter, userController.login);
+router.get("/logout",                                  userController.logout);   // works even with an expired / blocked session
+router.get("/session",          optionalAuth,          userController.session);
+router.get("/profile",          authVerification,      userController.profile);
+router.post("/update-profile",  authVerification,      userController.updateProfile);
+router.post("/change-password", authVerification,      authLimiter, userController.changePassword);
+router.post("/file-upload",     authVerification,      fileUploads.single("file"), fileUploads.cleanupOnError, userController.uploadFile);
+router.get("/user-profile/:userId",                    userController.publicProfile);
+router.get("/search-tenants",   authVerification,      userController.searchTenants);
 
 // PROPERTY
-router.post("/create-property",         authVerification, fileUploads.array("images", 5), propertyController.createProperty);
-router.get("/all-properties",                                                              propertyController.allProperties);
-router.get("/single-property/:id",                                                         propertyController.singleProperty);
-router.post("/update-property/:id",     authVerification, fileUploads.array("images", 5), propertyController.updateProperty);
+router.post("/create-property",         authVerification, fileUploads.array("images", 5), fileUploads.cleanupOnError, propertyController.createProperty);
+router.get("/all-properties",           optionalAuth,                                      propertyController.allProperties);
+router.get("/single-property/:id",      optionalAuth,                                      propertyController.singleProperty);
+router.post("/update-property/:id",     authVerification, fileUploads.array("images", 5), fileUploads.cleanupOnError, propertyController.updateProperty);
 router.delete("/delete-property/:id",   authVerification,                                  propertyController.deleteProperty);
 router.post("/change-availability/:id", authVerification,                                  propertyController.changeAvailability);
 router.get("/my-properties",            authVerification,                                  propertyController.myProperties);
 
 // MESSAGING
-router.post("/send-message",                              authVerification,                messageController.sendMessage);
+router.post("/send-message",                              authVerification,                    messageController.sendMessage);
 router.post("/broadcast-message",                         authVerification, adminVerification, messageController.broadcastMessage);
-router.get("/conversation/:propertyId/:otherUserId",      authVerification,                messageController.getConversation);
-router.get("/item-conversation/:itemId/:otherUserId",     authVerification,                messageController.getItemConversation);
-router.get("/inbox",                                      authVerification,                messageController.inbox);
-router.get("/my-tenants",                                 authVerification,                messageController.myTenants);
+router.get("/conversation/:propertyId/:otherUserId",      authVerification,                    messageController.getConversation);
+router.get("/item-conversation/:itemId/:otherUserId",     authVerification,                    messageController.getItemConversation);
+router.get("/direct-conversation/:otherUserId",           authVerification,                    messageController.getDirectConversation);
+router.get("/inbox",                                      authVerification,                    messageController.inbox);
+router.get("/unread-count",                               authVerification,                    messageController.unreadCount);
+router.get("/my-tenants",                                 authVerification,                    messageController.myTenants);
 
 // PAYMENTS / INVOICES
 router.post("/generate-invoice",          authVerification, paymentController.generateInvoice);
@@ -51,19 +63,22 @@ router.get("/single-invoice/:invoiceId",  authVerification, paymentController.si
 
 // RENTAL REQUESTS
 router.post("/rental-request",                     authVerification, rentalRequestController.sendRequest);
+router.post("/cancel-rental-request/:requestId",   authVerification, rentalRequestController.cancelRequest);
 router.get("/my-rental-requests",                  authVerification, rentalRequestController.myRentalRequests);
 router.get("/incoming-rental-requests",            authVerification, rentalRequestController.incomingRequests);
 router.post("/respond-rental-request/:requestId",  authVerification, rentalRequestController.respondRequest);
 router.get("/rental-request-status/:propertyId",   authVerification, rentalRequestController.checkRequestStatus);
 
 // MARKETPLACE
-router.post("/create-item",        authVerification, fileUploads.array("images", 5), marketplaceController.createItem);
+router.post("/create-item",        authVerification, fileUploads.array("images", 5), fileUploads.cleanupOnError, marketplaceController.createItem);
 router.get("/all-items",                                                               marketplaceController.allItems);
-router.get("/single-item/:id",                                                         marketplaceController.singleItem);
+router.get("/single-item/:id",     optionalAuth,                                       marketplaceController.singleItem);
 router.post("/update-item/:id",    authVerification,                                   marketplaceController.updateItem);
 router.delete("/delete-item/:id",  authVerification,                                   marketplaceController.deleteItem);
 router.get("/my-items",            authVerification,                                   marketplaceController.myItems);
+router.get("/my-orders",           authVerification,                                   marketplaceController.myOrders);
 router.post("/mark-sold/:id",      authVerification,                                   marketplaceController.markAsSold);
+router.post("/checkout",           authVerification,                                   marketplaceController.checkout);
 
 // REVIEWS
 router.post("/create-review",  authVerification, reviewController.createReview);
@@ -74,6 +89,7 @@ router.post("/create-report",  authVerification, reportController.createReport);
 router.get("/my-reports",      authVerification, reportController.myReports);
 
 // ADMIN
+router.get("/admin/overview",               authVerification, adminVerification, adminController.overview);
 router.get("/admin/all-users",              authVerification, adminVerification, adminController.allUsers);
 router.post("/admin/block-user/:id",        authVerification, adminVerification, adminController.blockUser);
 router.delete("/admin/remove-listing/:id",  authVerification, adminVerification, adminController.removeListing);

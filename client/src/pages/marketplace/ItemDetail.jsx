@@ -1,363 +1,138 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { singleItemAPI } from "../../api/marketplaceAPI";
-import { sendMessageAPI } from "../../api/messageAPI";
-import { createReportAPI } from "../../api/reportAPI";
+import { useCart } from "../../context/CartContext";
+import { fmtDate, money } from "../../utils/format";
+import useAsync from "../../hooks/useAsync";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
+import { Alert, Avatar, Button, ErrorState, PageHeader, PageLoader } from "../../components/ui";
+import Icon from "../../components/Icon";
 import LoginPromptModal from "../../components/LoginPromptModal";
-
-const AVATAR_COLORS = ["#e94560","#1a1a2e","#2980b9","#27ae60","#8e44ad","#e67e22"];
-const Avatar = ({ name, size=44 }) => {
-    const bg = AVATAR_COLORS[(name?.charCodeAt(0)||0) % AVATAR_COLORS.length];
-    const initials = name ? name.trim().split(/\s+/).map(w=>w[0]).join("").slice(0,2).toUpperCase() : "?";
-    return (
-        <div style={{width:size,height:size,borderRadius:"50%",background:bg,color:"#fff",
-            display:"flex",alignItems:"center",justifyContent:"center",
-            fontWeight:700,fontSize:size*0.35,flexShrink:0}}>
-            {initials}
-        </div>
-    );
-};
-
-// ── Cart helpers via localStorage ──
-const getCart  = ()        => { try { return JSON.parse(localStorage.getItem("mktCart")||"[]"); } catch { return []; } };
-const saveCart = (c)       => localStorage.setItem("mktCart", JSON.stringify(c));
-const isInCart = (itemId)  => getCart().some(i => i._id === itemId);
-const addCart  = (item)    => {
-    const c = getCart();
-    if (!c.find(i => i._id === item._id)) saveCart([...c, item]);
-};
+import ImageGallery from "../../components/ImageGallery";
+import ReportModal from "../../components/ReportModal";
+import MessageComposer from "../../components/MessageComposer";
 
 const ItemDetail = ({ user }) => {
-    const { id }      = useParams();
-    const navigate    = useNavigate();
-    const [item,      setItem]     = useState(null);
-    const [activeImg, setActiveImg]= useState(0);
-    const [msg,       setMsg]      = useState("");
-    const [msgSent,   setMsgSent]  = useState("");
-    const [reportMsg, setReportMsg]= useState("");
-    const [tab,       setTab]      = useState("overview");
-    const [inCart,    setInCart]   = useState(false);
-    const [loginModal, setLoginModal] = useState(false);
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const cart = useCart();
+    const { data: item, loading, error, reload } = useAsync(() => singleItemAPI(id).then(r => r.data.data[0] || null), [id]);
+    const [modal, setModal] = useState(null); // gate | report-item | report-seller
+    useDocumentTitle(item?.title || "Item");
 
-    useEffect(() => {
-        singleItemAPI(id).then(res => {
-            setItem(res.data.data[0]);
-            setInCart(isInCart(id));
-        });
-    }, [id]);
+    if (loading && !item) return <PageLoader label="Loading item…" />;
+    if (error || !item) {
+        return (
+            <div className="container page">
+                <ErrorState message={error || "This item may have been sold or removed."} onRetry={error ? reload : undefined} />
+                <p className="center mt-2"><Link to="/marketplace/items" className="btn btn-primary">Back to the marketplace</Link></p>
+            </div>
+        );
+    }
 
-    const handleAddCart = () => {
-        if (!item) return;
-        addCart(item);
-        setInCart(true);
+    const seller = item.sellerInfo?.[0];
+    const isMarketplace = user?.role === "marketplace";
+    const myId = String(user?._id || user?.id || "");
+    const isOwner = !!seller && myId && String(seller._id) === myId;
+    const inCart = cart.has(item._id);
+    const gate = () => setModal("gate");
+
+    const buyNow = () => {
+        if (!isMarketplace) return gate();
+        if (cart.add(item) || inCart) cart.open();
     };
-
-    const handleContact = async () => {
-        if (!msg.trim()) return;
-        try {
-            await sendMessageAPI({ itemId: id, receiverId: item.sellerInfo[0]._id, message: msg });
-            setMsgSent("✅ Message sent to seller!");
-            setMsg("");
-        } catch { setMsgSent("❌ Failed to send message."); }
-    };
-
-    const handleReport = async (type) => {
-        try {
-            const reportedEntity = type === "item" ? id : item.sellerInfo[0]._id;
-            const reportType     = type === "item" ? "marketplace" : "user";
-            const reason         = type === "item" ? "Fake or inappropriate listing" : "Bad behavior";
-            await createReportAPI({ reportType, reportedEntity, reason });
-            setReportMsg("✅ Report submitted. Our team will review it.");
-        } catch { setReportMsg("❌ Failed to submit report."); }
-    };
-
-    if (!item) return (
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",
-            flexDirection:"column",gap:"1rem",color:"#aaa"}}>
-            <div style={{fontSize:"2.5rem"}}>📦</div>
-            <p>Loading item details…</p>
-        </div>
-    );
-
-    const seller     = item.sellerInfo?.[0];
-    const images     = item.images || [];
-    const isLoggedIn = !!user;
-    const isMarketplaceUser = user?.role === "marketplace";
-    // Only marketplace users can message/cart. Others see a prompt.
-    const canMessage = isMarketplaceUser && seller && user._id !== seller._id;
-    const promptLogin = () => setLoginModal(true);
-    const loginModalTitle   = user ? "Marketplace Account Required" : "Login Required";
-    const loginModalMessage = user
-        ? `You're logged in as a ${user.role}. Messaging and cart features require a Marketplace account.`
-        : "You need a Marketplace account to contact sellers or add items to cart.";
-
-    const TABS = [
-        { id:"overview", label:"Overview" },
-        // Show Contact tab to everyone except the item's own seller
-        ...(seller && (!user || user._id !== seller._id) ? [{ id:"contact", label:"Contact Seller" }] : []),
-    ];
 
     return (
-        <div style={{background:"#f5f6fa",minHeight:"100vh",paddingBottom:"3rem"}}>
-            <style>{`
-                .item-detail-grid{display:grid;grid-template-columns:1fr 340px;gap:1.8rem;align-items:flex-start}
-                @media(max-width:768px){
-                    .item-detail-grid{grid-template-columns:1fr!important}
-                    .item-detail-grid>div:last-child{position:static!important}
-                }
-            `}</style>
+        <div className="container page">
+            <PageHeader
+                breadcrumbs={[{ label: "Marketplace", to: "/marketplace/items" }, ...(item.category ? [{ label: item.category, to: `/marketplace/items?cat=${encodeURIComponent(item.category)}` }] : []), { label: item.title }]}
+                title={item.title}
+                subtitle={<span className="row-wrap" style={{ gap: "0.5rem" }}><span className={`badge ${item.condition === "New" ? "badge-success" : "badge-warning"}`}>{item.condition}</span>{item.category && <span className="badge">{item.category}</span>}<span className="muted small">Listed {fmtDate(item.createdAt)}</span></span>}
+            />
 
-            {/* ── BREADCRUMB ── */}
-            <div style={{background:"#1a1a2e",padding:"0.8rem 1rem",display:"flex",alignItems:"center",gap:"0.5rem",fontSize:"0.82rem",color:"#aaa",flexWrap:"wrap"}}>
-                <span onClick={()=>navigate("/marketplace/items")} style={{cursor:"pointer",color:"#e94560"}}>Marketplace</span>
-                <span>›</span>
-                <span style={{color:"#fff"}}>{item.title}</span>
-            </div>
+            <div className="detail-layout">
+                <div className="stack stack-lg">
+                    <ImageGallery key={item._id} images={item.images || []} alt={item.title} aspect="4 / 3" placeholderIcon="package" />
 
-            <div style={{maxWidth:1100,margin:"0 auto",padding:"2rem 1rem"}}>
-                <div className="item-detail-grid">
+                    <section className="card card-pad">
+                        <h2 className="mb-1" style={{ fontSize: "1.1rem" }}>Description</h2>
+                        {item.description
+                            ? <p style={{ whiteSpace: "pre-wrap" }}>{item.description}</p>
+                            : <p className="muted">The seller hasn&apos;t added a description. Send them a message to ask for details.</p>}
+                    </section>
 
-                    {/* ── LEFT ── */}
-                    <div>
-                        {/* Image Gallery */}
-                        <div style={{borderRadius:16,overflow:"hidden",marginBottom:"1.5rem",boxShadow:"0 4px 20px rgba(0,0,0,0.08)"}}>
-                            {images.length > 0 ? (
-                                <>
-                                    <div style={{position:"relative",height:340,background:"#f0f2ff"}}>
-                                        <img src={images[activeImg]} alt={item.title}
-                                            style={{width:"100%",height:"100%",objectFit:"cover"}}
-                                            onError={e=>e.target.style.display="none"}/>
-                                        {images.length > 1 && (
-                                            <>
-                                                <button onClick={()=>setActiveImg(i=>(i-1+images.length)%images.length)}
-                                                    style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.4)",color:"#fff",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",fontSize:"1rem"}}>‹</button>
-                                                <button onClick={()=>setActiveImg(i=>(i+1)%images.length)}
-                                                    style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.4)",color:"#fff",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",fontSize:"1rem"}}>›</button>
-                                                <div style={{position:"absolute",bottom:10,right:12,background:"rgba(0,0,0,0.5)",color:"#fff",fontSize:"0.75rem",padding:"0.2rem 0.6rem",borderRadius:20}}>
-                                                    {activeImg+1}/{images.length}
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                    {images.length > 1 && (
-                                        <div style={{display:"flex",gap:"0.5rem",padding:"0.6rem",background:"#fff",overflowX:"auto"}}>
-                                            {images.map((img,i)=>(
-                                                <img key={i} src={img} alt=""
-                                                    onClick={()=>setActiveImg(i)}
-                                                    style={{width:64,height:52,objectFit:"cover",borderRadius:6,cursor:"pointer",
-                                                        border:`2px solid ${i===activeImg?"#e94560":"transparent"}`,flexShrink:0}}
-                                                    onError={e=>e.target.style.display="none"}/>
-                                            ))}
-                                        </div>
-                                    )}
-                                </>
+                    {!isOwner && !item.isSold && seller && (
+                        <section className="card card-pad" id="contact" aria-labelledby="contact-h">
+                            <h2 id="contact-h" className="mb-1" style={{ fontSize: "1.1rem" }}>Ask {seller.name.split(" ")[0]} a question</h2>
+                            {isMarketplace ? (
+                                <MessageComposer
+                                    payload={{ itemId: item._id, receiverId: seller._id }}
+                                    placeholder="Hi, is this still available? Could you share more photos?"
+                                />
                             ) : (
-                                <div style={{height:340,background:"#f0f2ff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"5rem",color:"#ddd"}}>📦</div>
-                            )}
-                        </div>
-
-                        {/* Title + badge */}
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"0.6rem",flexWrap:"wrap",gap:"0.5rem"}}>
-                            <h1 style={{fontSize:"1.45rem",fontWeight:800,color:"#1a1a2e",margin:0}}>{item.title}</h1>
-                            <span style={{background:item.condition==="New"?"#27ae60":"#e94560",color:"#fff",
-                                fontSize:"0.78rem",fontWeight:700,padding:"0.3rem 0.9rem",borderRadius:20}}>
-                                {item.condition}
-                            </span>
-                        </div>
-
-                        {/* Tab Nav */}
-                        <div style={{display:"flex",gap:0,borderBottom:"2px solid #eee",marginBottom:"1.5rem",marginTop:"1.2rem"}}>
-                            {TABS.map(t=>(
-                                <button key={t.id} onClick={()=>{
-                                    if(t.id==="contact" && !canMessage) { promptLogin(); return; }
-                                    setTab(t.id);
-                                }} style={{
-                                    background:"none",border:"none",padding:"0.7rem 1.2rem",cursor:"pointer",
-                                    fontSize:"0.88rem",fontWeight:700,
-                                    color:tab===t.id?"#e94560":"#888",
-                                    borderBottom:tab===t.id?"2px solid #e94560":"2px solid transparent",
-                                    marginBottom:"-2px",transition:"color 0.15s"
-                                }}>{t.label}</button>
-                            ))}
-                        </div>
-
-                        {/* ── OVERVIEW TAB ── */}
-                        {tab==="overview" && (
-                            <div>
-                                {/* Key details */}
-                                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:"0.8rem",marginBottom:"1.5rem"}}>
-                                    {[
-                                        {icon:"💰",label:"Price",value:"৳"+item.price?.toLocaleString()},
-                                        {icon:"📦",label:"Condition",value:item.condition},
-                                        ...(item.category ? [{icon:"🏷️",label:"Category",value:item.category}] : []),
-                                    ].map(d=>(
-                                        <div key={d.label} style={{background:"#fff",borderRadius:10,padding:"0.9rem 1rem",
-                                            boxShadow:"0 2px 8px rgba(0,0,0,0.05)",display:"flex",alignItems:"center",gap:"0.7rem"}}>
-                                            <span style={{fontSize:"1.4rem"}}>{d.icon}</span>
-                                            <div>
-                                                <div style={{fontSize:"0.7rem",color:"#aaa",fontWeight:600,textTransform:"uppercase"}}>{d.label}</div>
-                                                <div style={{fontWeight:700,color:"#1a1a2e",fontSize:"0.92rem"}}>{d.value}</div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Description */}
-                                {item.description && (
-                                    <div style={{background:"#fff",borderRadius:12,padding:"1.2rem",
-                                        boxShadow:"0 2px 8px rgba(0,0,0,0.05)",marginBottom:"1rem"}}>
-                                        <h3 style={{fontWeight:700,color:"#1a1a2e",fontSize:"0.95rem",marginBottom:"0.6rem"}}>📝 Description</h3>
-                                        <p style={{fontSize:"0.9rem",color:"#555",lineHeight:1.7,margin:0}}>{item.description}</p>
-                                    </div>
-                                )}
-
-                                {/* Report buttons */}
-                                {isLoggedIn && (
-                                    <div style={{marginTop:"1.2rem",display:"flex",gap:"0.6rem",flexWrap:"wrap"}}>
-                                        <button onClick={()=>handleReport("item")} style={{background:"none",border:"1px solid #e74c3c",color:"#e74c3c",padding:"0.4rem 1rem",borderRadius:8,cursor:"pointer",fontSize:"0.82rem",fontWeight:600}}>🚩 Report Listing</button>
-                                        {seller && user._id !== seller._id && (
-                                            <button onClick={()=>handleReport("user")} style={{background:"none",border:"1px solid #e74c3c",color:"#e74c3c",padding:"0.4rem 1rem",borderRadius:8,cursor:"pointer",fontSize:"0.82rem",fontWeight:600}}>🚩 Report Seller</button>
-                                        )}
-                                    </div>
-                                )}
-                                {!isLoggedIn && (
-                                    <div style={{marginTop:"1.2rem"}}>
-                                        <a href="/login" style={{display:"inline-flex",alignItems:"center",gap:"0.4rem",background:"none",border:"1px solid #aaa",color:"#888",padding:"0.4rem 1rem",borderRadius:8,fontSize:"0.82rem",fontWeight:600,textDecoration:"none"}}>
-                                            🔒 Login to report this listing
-                                        </a>
-                                    </div>
-                                )}
-                                {reportMsg && <p style={{marginTop:"0.5rem",fontSize:"0.82rem",color:reportMsg.startsWith("✅")?"#27ae60":"#e74c3c"}}>{reportMsg}</p>}
-                            </div>
-                        )}
-
-                        {/* ── CONTACT TAB ── */}
-                        {tab==="contact" && (
-                            <div>
-                                {canMessage ? (
-                                    <div style={{background:"#fff",borderRadius:12,padding:"1.4rem",boxShadow:"0 2px 8px rgba(0,0,0,0.05)"}}>
-                                        <h3 style={{fontWeight:700,color:"#1a1a2e",marginBottom:"1rem",fontSize:"1rem"}}>💬 Send a Message to Seller</h3>
-                                        <textarea value={msg} onChange={e=>setMsg(e.target.value)}
-                                            placeholder="Hi, I'm interested in this item…"
-                                            style={{width:"100%",minHeight:100,padding:"0.75rem",borderRadius:8,
-                                                border:"1px solid #eee",fontSize:"0.9rem",resize:"vertical",
-                                                boxSizing:"border-box",outline:"none"}}/>
-                                        <button onClick={handleContact}
-                                            style={{marginTop:"0.6rem",background:"#e94560",color:"#fff",border:"none",
-                                                padding:"0.65rem 1.6rem",borderRadius:8,cursor:"pointer",fontWeight:700}}>
-                                            Send Message
-                                        </button>
-                                        {msgSent && <p style={{marginTop:"0.6rem",fontSize:"0.85rem",color:msgSent.startsWith("✅")?"#27ae60":"#e74c3c"}}>{msgSent}</p>}
-                                    </div>
-                                ) : (
-                                    <div style={{background:"#fff",borderRadius:12,padding:"2.5rem",boxShadow:"0 2px 8px rgba(0,0,0,0.05)",textAlign:"center"}}>
-                                        <div style={{width:56,height:56,borderRadius:"50%",background:"#fff0f2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 1rem"}}>
-                                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e94560" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                                        </div>
-                                        <h3 style={{color:"#1a1a2e",fontWeight:700,marginBottom:"0.5rem"}}>
-                                            {user ? "Marketplace Account Required" : "Login to Contact"}
-                                        </h3>
-                                        <p style={{color:"#888",fontSize:"0.88rem",marginBottom:"1.2rem"}}>
-                                            {user
-                                                ? `You're logged in as a ${user.role}. Only Marketplace accounts can message sellers.`
-                                                : "You need to log in with a Marketplace account to message this seller."}
-                                        </p>
-                                        <div style={{display:"flex",gap:"0.8rem",justifyContent:"center"}}>
-                                            <a href="/login" style={{background:"#e94560",color:"#fff",padding:"0.6rem 1.6rem",borderRadius:8,fontWeight:700,fontSize:"0.9rem",textDecoration:"none"}}>Login</a>
-                                            <a href="/register" style={{background:"#f5f5f5",color:"#555",padding:"0.6rem 1.6rem",borderRadius:8,fontWeight:700,fontSize:"0.9rem",textDecoration:"none"}}>Register</a>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ── RIGHT STICKY PANEL ── */}
-                    <div style={{position:"sticky",top:80}}>
-                        {/* Price card */}
-                        <div style={{background:"#fff",borderRadius:14,padding:"1.4rem",
-                            boxShadow:"0 4px 20px rgba(0,0,0,0.09)",marginBottom:"1rem"}}>
-                            <div style={{fontWeight:800,fontSize:"2rem",color:"#e94560",lineHeight:1}}>
-                                ৳{item.price?.toLocaleString()}
-                            </div>
-                            <div style={{borderTop:"1px solid #f5f5f5",paddingTop:"0.8rem",marginTop:"0.8rem",
-                                display:"flex",flexDirection:"column",gap:"0.4rem"}}>
-                                <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.85rem"}}>
-                                    <span style={{color:"#888"}}>Condition</span>
-                                    <span style={{fontWeight:600,color:item.condition==="New"?"#27ae60":"#e67e22"}}>{item.condition}</span>
-                                </div>
-                                {item.category && (
-                                    <div style={{display:"flex",justifyContent:"space-between",fontSize:"0.85rem"}}>
-                                        <span style={{color:"#888"}}>Category</span>
-                                        <span style={{fontWeight:600}}>{item.category}</span>
-                                    </div>
-                                )}
-                            </div>
-                            {/* Contact Seller button — show to everyone except own seller */}
-                            {seller && (!user || user._id !== seller._id) && (
-                                <button onClick={()=> canMessage ? setTab("contact") : promptLogin()}
-                                    style={{marginTop:"1rem",width:"100%",background:"#e94560",color:"#fff",
-                                        border:"none",padding:"0.8rem",borderRadius:10,fontWeight:700,
-                                        cursor:"pointer",fontSize:"0.95rem"}}>
-                                    💬 Contact Seller
-                                </button>
-                            )}
-                            {/* ── ADD TO CART ── */}
-                            <button
-                                onClick={()=> { if(!isMarketplaceUser){ promptLogin(); return; } handleAddCart(); }}
-                                disabled={(inCart || item.isSold) && isMarketplaceUser}
-                                style={{marginTop:"0.6rem",width:"100%",
-                                    background: item.isSold ? "#f0f0f0" : (inCart && isMarketplaceUser) ? "#f0faf4" : "linear-gradient(90deg,#1a1a2e,#2c3e50)",
-                                    color: item.isSold ? "#aaa" : (inCart && isMarketplaceUser) ? "#27ae60" : "#fff",
-                                    border:`1px solid ${item.isSold?"#ddd":(inCart && isMarketplaceUser)?"#c3e6cb":"transparent"}`,
-                                    padding:"0.8rem",borderRadius:10,fontWeight:700,
-                                    cursor: (item.isSold || (inCart && isMarketplaceUser)) ? "default":"pointer",fontSize:"0.9rem",
-                                    boxShadow: (item.isSold || (inCart && isMarketplaceUser)) ? "none":"0 4px 12px rgba(26,26,46,0.25)"}}>
-                                {item.isSold ? "🚫 Already Sold" : (inCart && isMarketplaceUser) ? "✓ Added to Cart" : "🛒 Add to Cart"}
-                            </button>
-                            {(inCart && isMarketplaceUser) && !item.isSold && (
-                                <div style={{textAlign:"center",marginTop:"0.4rem"}}>
-                                    <a href="/marketplace/items" style={{fontSize:"0.78rem",color:"#e94560",fontWeight:600,textDecoration:"none"}}>
-                                        → Go to Cart on Homepage
-                                    </a>
+                                <div className="row-wrap">
+                                    <p className="muted grow">{user ? "Messaging sellers needs a Marketplace account." : "Log in with a Marketplace account to message the seller."}</p>
+                                    <Button onClick={gate}>{user ? "Why can't I message?" : "Log in to message"}</Button>
                                 </div>
                             )}
-                            <button onClick={()=>navigate("/marketplace/items")}
-                                style={{marginTop:"0.5rem",width:"100%",background:"none",border:"1px solid #eee",
-                                    color:"#888",padding:"0.6rem",borderRadius:10,cursor:"pointer",fontSize:"0.85rem"}}>
-                                ← Back to Marketplace
-                            </button>
-                        </div>
+                        </section>
+                    )}
 
-                        {/* Seller card */}
-                        {seller && (
-                            <div style={{background:"#fff",borderRadius:14,padding:"1.2rem",
-                                boxShadow:"0 4px 20px rgba(0,0,0,0.09)"}}>
-                                <h4 style={{fontSize:"0.78rem",fontWeight:700,color:"#aaa",textTransform:"uppercase",
-                                    letterSpacing:"0.05em",marginBottom:"0.8rem"}}>Listed By</h4>
-                                <div style={{display:"flex",alignItems:"center",gap:"0.75rem",marginBottom:"0.6rem"}}>
-                                    <Avatar name={seller.name} size={44}/>
-                                    <div>
-                                        <div style={{fontWeight:700,color:"#1a1a2e",fontSize:"0.95rem"}}>{seller.name}</div>
-                                        <span style={{background:"#f0f2ff",color:"#2980b9",fontSize:"0.68rem",
-                                            padding:"0.12rem 0.5rem",borderRadius:20,fontWeight:600}}>Seller</span>
-                                    </div>
-                                </div>
-                                <div style={{fontSize:"0.82rem",color:"#aaa"}}>{seller.email}</div>
-                            </div>
-                        )}
-                    </div>
+                    {user && !isOwner && ["tenant", "landlord", "marketplace"].includes(user.role) && (
+                        <div className="row-wrap">
+                            <Button variant="ghost" size="sm" icon="flag" onClick={() => setModal("report-item")}>Report listing</Button>
+                            {seller && <Button variant="ghost" size="sm" icon="flag" onClick={() => setModal("report-seller")}>Report seller</Button>}
+                        </div>
+                    )}
                 </div>
+
+                <aside className="sticky-panel stack stack-md" aria-label="Buy this item">
+                    <div className="card card-pad">
+                        <div className="price-big">{money(item.price)}</div>
+                        <div className="mt-2">
+                            <div className="kv"><span>Condition</span><span>{item.condition}</span></div>
+                            {item.category && <div className="kv"><span>Category</span><span>{item.category}</span></div>}
+                            <div className="kv"><span>Status</span><span>{item.isSold ? <span className="badge badge-danger">Sold</span> : <span className="badge badge-success badge-dot">Available</span>}</span></div>
+                        </div>
+
+                        <div className="stack stack-sm mt-2">
+                            {item.isSold ? (
+                                <Alert tone="warning">This item has been sold. <Link to="/marketplace/items">Browse similar items</Link></Alert>
+                            ) : isOwner ? (<>
+                                <Alert tone="info">This is your listing.</Alert>
+                                <Link to="/marketplace/my-items" className="btn btn-primary btn-block"><Icon name="edit" size={16} /> Manage my listings</Link>
+                            </>) : (<>
+                                <Button size="lg" block icon="bag" onClick={buyNow}>Buy now</Button>
+                                <Button variant="secondary" block icon={inCart ? "check" : "cart"} disabled={inCart && isMarketplace} onClick={() => (isMarketplace ? cart.add(item) : gate())}>
+                                    {inCart && isMarketplace ? "In your cart" : "Add to cart"}
+                                </Button>
+                                {!isMarketplace && <p className="xs muted center">{user ? "A Marketplace account is needed to buy." : "Free account needed – takes a minute."}</p>}
+                            </>)}
+                            <Button variant="ghost" icon="arrow-left" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/marketplace/items"))}>Back to results</Button>
+                        </div>
+                    </div>
+
+                    {seller && (
+                        <div className="card card-pad">
+                            <div className="eyebrow mb-1" style={{ color: "var(--muted)" }}>Sold by</div>
+                            <div className="row"><Avatar name={seller.name} size={46} /><div><strong>{seller.name}</strong><div className="small muted">Member since {fmtDate(seller.createdAt, { month: "short", year: "numeric" })}</div></div></div>
+                        </div>
+                    )}
+                    <p className="xs muted center"><Icon name="shield" size={12} /> Checkout is a simulation – no real payment is taken.</p>
+                </aside>
             </div>
 
-            {/* ── LOGIN PROMPT MODAL ── */}
-            {loginModal && (
+            {modal === "gate" && (
                 <LoginPromptModal
-                    onClose={()=>setLoginModal(false)}
-                    title={loginModalTitle}
-                    message={loginModalMessage}
+                    onClose={() => setModal(null)} cta={user ? "register" : "login"}
+                    title={user ? "Marketplace account required" : "Log in to continue"}
+                    message={user
+                        ? `You're logged in as a ${user.role}. Buying and messaging sellers need a Marketplace account – you can register a separate one with a different email.`
+                        : "Create a free Marketplace account (or log in) to buy this item or message the seller."}
                 />
             )}
+            {modal === "report-item" && <ReportModal type="marketplace" entityId={item._id} subject={item.title} onClose={() => setModal(null)} />}
+            {modal === "report-seller" && seller && <ReportModal type="user" entityId={seller._id} subject={seller.name} onClose={() => setModal(null)} />}
         </div>
     );
 };
