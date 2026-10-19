@@ -1,406 +1,236 @@
-import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { generateInvoiceAPI, paymentHistoryAPI } from "../../api/paymentAPI";
-import { myTenantsAPI } from "../../api/messageAPI";
-import { searchTenantsAPI } from "../../api/userAPI";
+import { useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { generateInvoiceAPI, paymentHistoryAPI, extendInvoiceAPI } from "../../api/paymentAPI";
 import { incomingRentalRequestsAPI } from "../../api/rentalRequestAPI";
+import { useToast } from "../../context/ToastContext";
+import { getErrorMessage } from "../../utils/errors";
+import { daysUntil, fmtDate, money } from "../../utils/format";
+import useAsync from "../../hooks/useAsync";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
+import { Alert, Button, EmptyState, ErrorState, Field, PageHeader, Stat, StatusBadge, TableSkeleton } from "../../components/ui";
+import Modal from "../../components/Modal";
+import ReceiptModal from "../../components/ReceiptModal";
+import Select from "../../components/Select";
 
-const generateMonths = () => {
-    const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const monthOptions = () => {
     const now = new Date();
     return Array.from({ length: 12 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-        return `${names[d.getMonth()]} ${d.getFullYear()}`;
+        const d = new Date(now.getFullYear(), now.getMonth() - 2 + i, 1);
+        return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
     });
 };
-const MONTH_OPTIONS = generateMonths();
+const currentMonth = () => { const d = new Date(); return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+const FILTERS = ["All", "Pending", "Overdue", "Paid"];
 
-const statusBadge = (s) => {
-    const cls = s === "Paid" ? "green" : s === "Overdue" ? "red" : "yellow";
-    return <span className={`badge ${cls}`}>{s}</span>;
-};
-/* ── Tenant Search Box ─────────────────────────────────────────── */
-const TenantSearchBox = ({ knownTenants, onSelect }) => {
-    const [query,        setQuery]        = useState("");
-    const [results,      setResults]      = useState([]);
-    const [searching,    setSearching]    = useState(false);
-    const [showDropdown, setShowDropdown] = useState(false);
-    const debounceRef = useRef(null);
-    const boxRef      = useRef(null);
-
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handler = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setShowDropdown(false); };
-        document.addEventListener("mousedown", handler);
-        return () => document.removeEventListener("mousedown", handler);
-    }, []);
-
-    const handleInput = (e) => {
-        const val = e.target.value;
-        setQuery(val);
-        setShowDropdown(true);
-        clearTimeout(debounceRef.current);
-        if (val.trim().length < 2) { setResults([]); return; }
-        setSearching(true);
-        debounceRef.current = setTimeout(async () => {
-            try {
-                const res = await searchTenantsAPI(val.trim());
-                // merge with known tenants so both sources appear
-                const fromSearch = res.data.data || [];
-                const merged = [...knownTenants];
-                fromSearch.forEach(u => {
-                    if (!merged.find(m => String(m.tenantId) === String(u._id)))
-                        merged.push({ tenantId: u._id, tenantName: u.name, tenantEmail: u.email, fromSearch: true });
-                });
-                setResults(merged.filter(t =>
-                    t.tenantName?.toLowerCase().includes(val.toLowerCase()) ||
-                    t.tenantEmail?.toLowerCase().includes(val.toLowerCase())
-                ));
-            } catch { setResults([]); }
-            finally   { setSearching(false); }
-        }, 350);
+const ExtendModal = ({ invoice, onClose, onDone }) => {
+    const toast = useToast();
+    const [days, setDays] = useState("3");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const submit = async (e) => {
+        e.preventDefault();
+        setBusy(true); setError("");
+        try {
+            await extendInvoiceAPI(invoice._id, Number(days));
+            toast.success(`Invoice extended by ${days} days.`);
+            onDone();
+        } catch (err) { setError(getErrorMessage(err)); }
+        finally { setBusy(false); }
     };
-    const pick = (t) => {
-        setQuery(`${t.tenantName} (${t.tenantEmail})`);
-        setShowDropdown(false);
-        onSelect({ tenantId: String(t.tenantId), tenantName: t.tenantName, tenantEmail: t.tenantEmail });
-    };
-
-    // Show known tenants on focus even before typing
-    const handleFocus = () => {
-        setShowDropdown(true);
-        if (!query && knownTenants.length > 0) setResults(knownTenants);
-    };
-
     return (
-        <div ref={boxRef} style={{ position:"relative" }}>
-            <input value={query} onChange={handleInput} onFocus={handleFocus}
-                placeholder="Type tenant name or email to search..." autoComplete="off" />
-            {showDropdown && results.length > 0 && (
-                <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#fff",
-                    border:"1px solid #e0ddd8", zIndex:200,
-                    boxShadow:"0 4px 16px rgba(0,0,0,0.1)", maxHeight:220, overflowY:"auto" }}>
-                    {searching && <p style={{ padding:"0.6rem 1rem", color:"#aaa", fontSize:"0.85rem" }}>Searching...</p>}
-                    {results.map((t, i) => (
-                        <div key={i} onClick={() => pick(t)}
-                             style={{ padding:"0.65rem 1rem", cursor:"pointer", borderBottom:"1px solid #f5f2ee",
-                                display:"flex", flexDirection:"column", gap:2 }}
-                             onMouseEnter={e => e.currentTarget.style.background="#fafaf8"}
-                             onMouseLeave={e => e.currentTarget.style.background="#fff"}>
-                            <span style={{ fontWeight:600, fontSize:"0.86rem" }}>{t.tenantName}</span>
-                            <span style={{ fontSize:"0.76rem", color:"#888" }}>
-                                {t.tenantEmail}
-                                {t.fromRequest && <span style={{ marginLeft:6, background:"#f0f8f0", color:"#2e7d32", padding:"0.06rem 0.4rem", fontSize:"0.68rem", fontWeight:700 }}>Requested</span>}
-                                {!t.fromSearch && !t.fromRequest && <span style={{ marginLeft:6, background:"#f5f2ee", color:"#888", padding:"0.06rem 0.4rem", fontSize:"0.68rem", fontWeight:700 }}>Messaged</span>}
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            )}
-            {showDropdown && !searching && query.trim().length >= 2 && results.length === 0 && (
-                <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#fff",
-                    border:"1px solid #e0ddd8", zIndex:200, padding:"0.7rem 1rem" }}>
-                    <span style={{ color:"#aaa", fontSize:"0.85rem" }}>No tenants found</span>
-                </div>
-            )}
-        </div>
+        <Modal title="Extend due date" size="sm" onClose={onClose}
+            footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button type="submit" form="extend-form" loading={busy}>Extend</Button></>}>
+            <form id="extend-form" onSubmit={submit} noValidate>
+                <p>Give {invoice.tenantInfo?.[0]?.name || "the tenant"} more time to pay <strong>{invoice.invoiceNo}</strong> (currently due {fmtDate(invoice.dueDate)}). An invoice can be extended once; overdue invoices are counted from today and become pending again.</p>
+                {error && <Alert tone="error">{error}</Alert>}
+                <Field label="Extra days">
+                    <Select value={days} onChange={e => setDays(e.target.value)}>{[3, 4, 5, 6, 7].map(d => <option key={d} value={d}>{d} days</option>)}</Select>
+                </Field>
+            </form>
+        </Modal>
     );
 };
 
-/* ── Main Component ────────────────────────────────────────────── */
 const LandlordInvoices = () => {
+    useDocumentTitle("Invoices");
+    const toast = useToast();
     const location = useLocation();
+    const prefill = location.state?.prefill;
 
-    const [invoices,   setInvoices]   = useState([]);
-    const [tenants,    setTenants]    = useState([]);
-    const [rentalReqs, setRentalReqs] = useState([]);
-    const [form,       setForm]       = useState({ propertyId:"", tenantId:"", tenantLabel:"", amount:"", forMonth:"", note:"", dueDays:"7" });
-    const [msg,     setMsg]     = useState("");
-    const [msgType, setMsgType] = useState("success");
-    const [loading, setLoading] = useState(false);
+    const inv = useAsync(() => paymentHistoryAPI().then(r => r.data.data || []), []);
+    const reqs = useAsync(() => incomingRentalRequestsAPI().then(r => r.data.data || []), []);
+
+    const [form, setForm] = useState(() => ({
+        propertyId: prefill?.propertyId || "", tenantId: prefill?.tenantId || "",
+        forMonth: currentMonth(), amount: prefill?.monthlyRent ? String(prefill.monthlyRent) : "", dueDays: "7", note: "",
+    }));
+    const [errors, setErrors] = useState({});
+    const [serverError, setServerError] = useState("");
+    const [creating, setCreating] = useState(false);
+    const [filter, setFilter] = useState("All");
     const [receipt, setReceipt] = useState(null);
+    const [extend, setExtend] = useState(null);
 
-    const load = async () => {
-        const [inv, ten, req] = await Promise.all([
-            paymentHistoryAPI(), myTenantsAPI(), incomingRentalRequestsAPI()
-        ]);
-        setInvoices(inv.data.data || []);
-        setTenants(ten.data.data || []);
-        setRentalReqs(req.data.data || []);
-    };
+    const invoices = useMemo(() => inv.data || [], [inv.data]);
+    const months = useMemo(monthOptions, []);
 
-    useEffect(() => {
-        load().then(() => {
-            const prefill = location.state?.prefill;
-            if (prefill) {
-                setForm({
-                    propertyId:  prefill.propertyId  || "",
-                    tenantId:    prefill.tenantId    || "",
-                    tenantLabel: prefill.tenantName && prefill.tenantEmail
-                        ? `${prefill.tenantName} (${prefill.tenantEmail})` : "",
-                    amount:  prefill.monthlyRent ? String(prefill.monthlyRent) : "",
-                    forMonth:"", note:"", dueDays:"7"
-                });
-            }
+    /* properties that have at least one accepted tenant – the only ones an invoice can be created for */
+    const properties = useMemo(() => {
+        const map = new Map();
+        (reqs.data || []).filter(r => r.status === "Accepted").forEach(r => {
+            const p = r.propertyInfo?.[0], t = r.tenantInfo?.[0];
+            if (!p || !t) return;
+            if (!map.has(p._id)) map.set(p._id, { ...p, tenants: [] });
+            map.get(p._id).tenants.push(t);
         });
-    }, []); // eslint-disable-line
+        return [...map.values()];
+    }, [reqs.data]);
 
-    /* Unique properties: messaged tenants + accepted rental requests + prefill */
-    const uniqueProperties = (() => {
-        const acc = [];
-        const add = (propertyId, label, monthlyRent) => {
-            if (!acc.find(p => p.propertyId === String(propertyId)))
-                acc.push({ propertyId: String(propertyId), label, monthlyRent });
-        };
-        tenants.forEach(t => add(t.propertyId, `${t.propertyType} — ${t.propertyArea}`, t.monthlyRent));
-        rentalReqs.filter(r => r.status === "Accepted").forEach(r => {
-            const prop = r.propertyInfo?.[0];
-            if (prop) add(prop._id, `${prop.propertyType} — ${prop.area}`, prop.monthlyRent);
-        });
-        const p = location.state?.prefill;
-        if (p?.propertyId && !acc.find(x => x.propertyId === p.propertyId))
-            acc.push({ propertyId: p.propertyId, label: p.propertyLabel || p.propertyId, monthlyRent: p.monthlyRent });
-        return acc;
-    })();
+    const property = properties.find(p => p._id === form.propertyId);
+    const duplicate = form.tenantId && invoices.some(i =>
+        String(i.tenantInfo?.[0]?._id) === form.tenantId && String(i.propertyInfo?.[0]?._id) === form.propertyId && i.forMonth === form.forMonth);
 
-    /* Tenants for selected property */
-    const tenantsForProperty = (() => {
-        const list = tenants
-            .filter(t => String(t.propertyId) === form.propertyId)
-            .map(t => ({ tenantId: t.tenantId, tenantName: t.tenantName, tenantEmail: t.tenantEmail }));
-        rentalReqs
-            .filter(r => r.status === "Accepted" && String(r.propertyInfo?.[0]?._id) === form.propertyId)
-            .forEach(r => {
-                const t = r.tenantInfo?.[0];
-                if (t && !list.find(m => String(m.tenantId) === String(t._id)))
-                    list.push({ tenantId: t._id, tenantName: t.name, tenantEmail: t.email, fromRequest: true });
-            });
-        const p = location.state?.prefill;
-        if (p?.tenantId && form.propertyId === p.propertyId && !list.find(m => String(m.tenantId) === p.tenantId))
-            list.push({ tenantId: p.tenantId, tenantName: p.tenantName, tenantEmail: p.tenantEmail, fromRequest: true });
-        return list;
-    })();
-
-    // When property changes — reset tenant, pre-fill amount
-    const handlePropertyChange = (e) => {
-        const propId   = e.target.value;
-        const propData = uniqueProperties.find(p => p.propertyId === propId);
-        setForm(f => ({ ...f, propertyId: propId, tenantId:"", tenantLabel:"", amount: propData ? String(propData.monthlyRent) : "" }));
+    const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: "" })); setServerError(""); };
+    const pickProperty = (id) => {
+        const p = properties.find(x => x._id === id);
+        setForm(f => ({ ...f, propertyId: id, tenantId: p?.tenants.length === 1 ? p.tenants[0]._id : "", amount: p ? String(p.monthlyRent) : "" }));
+        setErrors({}); setServerError("");
     };
 
-    const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
-
-    // Called when a tenant is selected from the search/dropdown
-    const handleTenantSelect = ({ tenantId, tenantName, tenantEmail }) => {
-        setForm(f => ({ ...f, tenantId, tenantLabel: `${tenantName} (${tenantEmail})` }));
-    };
-
-    const handleGenerate = async (e) => {
+    const create = async (e) => {
         e.preventDefault();
-        setMsg("");
-        if (!form.propertyId) { setMsg("Please select a property."); setMsgType("error"); return; }
-        if (!form.tenantId)   { setMsg("Please select or search a tenant."); setMsgType("error"); return; }
-        if (!form.forMonth)   { setMsg("Please select a month."); setMsgType("error"); return; }
-        setLoading(true);
+        const err = {};
+        if (!form.propertyId) err.propertyId = "Choose a property.";
+        if (!form.tenantId) err.tenantId = "Choose a tenant.";
+        if (!form.amount || Number(form.amount) <= 0) err.amount = "Enter an amount greater than 0.";
+        const dd = Number(form.dueDays);
+        if (!Number.isInteger(dd) || dd < 1 || dd > 30) err.dueDays = "Enter 1–30 days.";
+        if (duplicate) err.forMonth = "An invoice for this tenant and month already exists.";
+        setErrors(err);
+        if (Object.keys(err).length) return;
+        setCreating(true); setServerError("");
         try {
-            const res = await generateInvoiceAPI({ propertyId: form.propertyId, tenantId: form.tenantId, amount: form.amount, forMonth: form.forMonth, note: form.note, dueDays: form.dueDays });
-            setMsg(`✅ Invoice ${res.data.data.invoiceNo} sent to tenant! Due in ${form.dueDays} days.`);
-            setMsgType("success");
-            setForm({ propertyId:"", tenantId:"", tenantLabel:"", amount:"", forMonth:"", note:"", dueDays:"7" });
-            load();
-        } catch (err) {
-            setMsg(err.response?.data?.message || "Failed to generate invoice");
-            setMsgType("error");
-        } finally { setLoading(false); }
+            const res = await generateInvoiceAPI({ ...form, amount: Number(form.amount), dueDays: dd, note: form.note.trim() });
+            toast.success(`Invoice ${res.data.data.invoiceNo} sent to the tenant.`);
+            setForm(f => ({ ...f, note: "" }));
+            inv.reload(true);
+        } catch (e2) { setServerError(getErrorMessage(e2, "Could not create the invoice.")); }
+        finally { setCreating(false); }
     };
 
     const summary = {
-        total:   invoices.length,
-        paid:    invoices.filter(i => i.status === "Paid").length,
-        pending: invoices.filter(i => i.status === "Pending").length,
-        overdue: invoices.filter(i => i.status === "Overdue").length,
-        revenue: invoices.filter(i => i.status === "Paid").reduce((s, i) => s + (i.amount||0), 0)
+        paid: invoices.filter(i => i.status === "Paid"),
+        pending: invoices.filter(i => i.status === "Pending"),
+        overdue: invoices.filter(i => i.status === "Overdue"),
     };
+    const shown = filter === "All" ? invoices : invoices.filter(i => i.status === filter);
+    const loading = (inv.loading && !inv.data) || (reqs.loading && !reqs.data);
 
     return (
-        <div className="container">
-            <style>{`
-                .invoice-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.8rem}
-                @media(max-width:600px){ .invoice-detail-grid{grid-template-columns:1fr!important} }
-            `}</style>
-            <h2 style={{ marginBottom:"1.5rem", letterSpacing:"-0.02em" }}>Invoice Management</h2>
+        <div className="container page">
+            <PageHeader title="Invoices" subtitle="Bill your tenants for rent and see what has been paid." />
 
-            {/* ── Summary ── */}
-            <div className="dashboard-stats" style={{ marginBottom:"2rem" }}>
-                <div className="stat-card"><h3>{summary.total}</h3><p>Total</p></div>
-                <div className="stat-card"><h3 style={{color:"#2e7d32"}}>{summary.paid}</h3><p>Paid</p></div>
-                <div className="stat-card"><h3 style={{color:"#8a6914"}}>{summary.pending}</h3><p>Pending</p></div>
-                <div className="stat-card"><h3 style={{color:"#c0392b"}}>{summary.overdue}</h3><p>Overdue</p></div>
-                <div className="stat-card"><h3 style={{color:"#2e7d32",fontSize:"1.1rem"}}>৳{summary.revenue.toLocaleString()}</h3><p>Revenue</p></div>
-            </div>
+            {loading && <TableSkeleton rows={5} />}
+            {(inv.error && !inv.data) && <ErrorState message={inv.error} onRetry={inv.reload} />}
 
-            {/* ── Generate Form ── */}
-            <div className="message-box">
-                <h3 style={{ marginBottom:"1.2rem" }}>Generate Rent Invoice</h3>
+            {inv.data && (<div className="stack stack-lg">
+                <div className="stats">
+                    <Stat icon="receipt" label="Total invoices" value={invoices.length} />
+                    <Stat icon="check-circle" label="Paid" value={summary.paid.length} tone="success" />
+                    <Stat icon="clock" label="Pending" value={summary.pending.length} tone={summary.pending.length ? "warning" : undefined} />
+                    <Stat icon="alert" label="Overdue" value={summary.overdue.length} tone={summary.overdue.length ? "danger" : undefined} />
+                    <Stat icon="money" label="Collected" value={money(summary.paid.reduce((s, i) => s + (i.amount || 0), 0))} tone="success" />
+                </div>
 
-                {/* Prefill notice */}
-                {location.state?.prefill && (
-                    <div style={{ background:"#f0f8f0", border:"1px solid #c8e6c9", padding:"0.75rem 1rem",
-                        marginBottom:"1.1rem", fontSize:"0.83rem", color:"#2e7d32", fontWeight:600,
-                        display:"flex", flexWrap:"wrap", gap:"0.3rem", alignItems:"center" }}>
-                        ✅ Pre-filled from rental request —&nbsp;
-                        <strong>{location.state.prefill.tenantName}</strong> for&nbsp;
-                        <strong>{location.state.prefill.propertyLabel}</strong>.
-                        &nbsp;Select the month and confirm.
-                    </div>
-                )}
-
-                {msg && <p className={msgType === "error" ? "error" : "success"} style={{ marginBottom:"1rem" }}>{msg}</p>}
-
-                <form onSubmit={handleGenerate}>
-                    <label>Step 1 — Select Property</label>
-                    <select value={form.propertyId} onChange={handlePropertyChange} required>
-                        <option value="">— Select a property —</option>
-                        {uniqueProperties.map(p => (
-                            <option key={p.propertyId} value={p.propertyId}>{p.label} (৳{p.monthlyRent}/mo)</option>
-                        ))}
-                    </select>
-
-                    {form.propertyId && (
-                        <>
-                            <label style={{ marginTop:"0.5rem" }}>Step 2 — Select Tenant</label>
-                            <p style={{ fontSize:"0.78rem", color:"#aaa", margin:"0.2rem 0 0.5rem" }}>
-                                Search any tenant by name/email, or pick from known tenants below.
-                            </p>
-                            <TenantSearchBox knownTenants={tenantsForProperty} onSelect={handleTenantSelect} />
-
-                            {tenantsForProperty.length > 0 && (
-                                <div style={{ marginTop:"0.6rem", display:"flex", flexWrap:"wrap", gap:"0.4rem" }}>
-                                    {tenantsForProperty.map(t => (
-                                        <button key={String(t.tenantId)} type="button"
-                                            onClick={() => handleTenantSelect({ tenantId: String(t.tenantId), tenantName: t.tenantName, tenantEmail: t.tenantEmail })}
-                                            style={{
-                                                background: String(t.tenantId) === form.tenantId ? "#111" : "#f5f2ee",
-                                                color:      String(t.tenantId) === form.tenantId ? "#fff" : "#333",
-                                                fontSize:"0.78rem", padding:"0.3rem 0.8rem",
-                                                border: String(t.tenantId) === form.tenantId ? "1px solid #111" : "1px solid #e8e4dc",
-                                                cursor:"pointer", textTransform:"none", letterSpacing:0,
-                                                display:"inline-flex", alignItems:"center", gap:"0.3rem"
-                                            }}>
-                                            {t.tenantName}
-                                            <span style={{ background: t.fromRequest ? "#f0f8f0" : "#f5f2ee",
-                                                color: t.fromRequest ? "#2e7d32" : "#aaa",
-                                                fontSize:"0.62rem", padding:"0.05rem 0.35rem", fontWeight:700 }}>
-                                                {t.fromRequest ? "Requested" : "Messaged"}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-
-                            {form.tenantId && (
-                                <p style={{ fontSize:"0.8rem", color:"#2e7d32", marginTop:"0.4rem", fontWeight:600 }}>
-                                    ✓ Selected: <strong>{form.tenantLabel}</strong>
-                                </p>
-                            )}
-                        </>
-                    )}
-
-                    {form.tenantId && (
-                        <>
-                            <label style={{ marginTop:"0.5rem" }}>Step 3 — Invoice Details</label>
-                            <div className="invoice-detail-grid">
-                                <div>
-                                    <label style={{ fontSize:"0.75rem", color:"#888" }}>For Month *</label>
-                                    <select name="forMonth" value={form.forMonth} onChange={handleChange} required>
-                                        <option value="">— Select month —</option>
-                                        {MONTH_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={{ fontSize:"0.75rem", color:"#888" }}>Amount (BDT) *</label>
-                                    <input name="amount" type="number" min="1" value={form.amount} onChange={handleChange} required
-                                        onKeyDown={e => { const ok=["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"]; if (!ok.includes(e.key) && !/^[0-9]$/.test(e.key)) e.preventDefault(); }} />
-                                </div>
-                                <div>
-                                    <label style={{ fontSize:"0.75rem", color:"#888" }}>Payment Due In (days)</label>
-                                    <input name="dueDays" type="number" min="1" max="30" value={form.dueDays} onChange={handleChange} />
-                                </div>
-                                <div>
-                                    <label style={{ fontSize:"0.75rem", color:"#888" }}>Note (optional)</label>
-                                    <input name="note" placeholder="e.g. Includes utility charges" value={form.note} onChange={handleChange} />
-                                </div>
+                <section className="card card-pad" aria-labelledby="create-h">
+                    <h2 id="create-h" className="mb-1">Create an invoice</h2>
+                    {properties.length === 0 && !reqs.loading ? (
+                        <Alert tone="info" title="No accepted tenants yet">
+                            Invoices can be sent to tenants whose rental request you&apos;ve accepted. <Link to="/landlord/properties">Review your requests →</Link>
+                        </Alert>
+                    ) : (
+                        <form onSubmit={create} noValidate>
+                            {serverError && <Alert tone="error">{serverError}</Alert>}
+                            <div className="form-grid">
+                                <Field label="Property" error={errors.propertyId} required>
+                                    <Select value={form.propertyId} onChange={e => pickProperty(e.target.value)}>
+                                        <option value="">Select a property</option>
+                                        {properties.map(p => <option key={p._id} value={p._id}>{p.propertyType} — {p.area} ({money(p.monthlyRent)}/mo)</option>)}
+                                    </Select>
+                                </Field>
+                                <Field label="Tenant" error={errors.tenantId} required hint={property ? undefined : "Choose a property first."}>
+                                    <Select value={form.tenantId} onChange={e => set("tenantId", e.target.value)} disabled={!property}>
+                                        <option value="">Select a tenant</option>
+                                        {property?.tenants.map(t => <option key={t._id} value={t._id}>{t.name} ({t.email})</option>)}
+                                    </Select>
+                                </Field>
+                                <Field label="For month" error={errors.forMonth} required>
+                                    <Select value={form.forMonth} onChange={e => set("forMonth", e.target.value)}>{months.map(m => <option key={m}>{m}</option>)}</Select>
+                                </Field>
+                                <Field label="Amount" error={errors.amount} required htmlFor="inv-amount">
+                                    <div className="input-group"><span className="input-prefix">৳</span><input id="inv-amount" type="number" min="1" inputMode="numeric" value={form.amount} onChange={e => set("amount", e.target.value)} /></div>
+                                </Field>
+                                <Field label="Payment due in (days)" error={errors.dueDays} hint="The tenant sees this deadline on the invoice.">
+                                    <input type="number" min="1" max="30" value={form.dueDays} onChange={e => set("dueDays", e.target.value)} />
+                                </Field>
+                                <Field label="Note to tenant" optional>
+                                    <input maxLength={200} placeholder="e.g. includes utility charges" value={form.note} onChange={e => set("note", e.target.value)} />
+                                </Field>
                             </div>
-                            {form.forMonth && (
-                                <button type="submit" disabled={loading} style={{ marginTop:"0.9rem" }}>
-                                    {loading ? "Generating…" : "Generate Invoice"}
-                                </button>
-                            )}
-                        </>
+                            {duplicate && <Alert tone="warning">You&apos;ve already invoiced this tenant for {form.forMonth}.</Alert>}
+                            <div className="form-actions"><Button type="submit" size="lg" icon="send" loading={creating} disabled={!!duplicate}>Send invoice</Button></div>
+                        </form>
                     )}
-                </form>
-            </div>
+                </section>
 
-            {/* ── Invoice History ── */}
-            <h3 style={{ marginTop:"2.5rem", marginBottom:"1rem", letterSpacing:"-0.01em" }}>Invoice History</h3>
-            {invoices.length === 0 ? <p style={{ color:"#aaa", fontSize:"0.88rem" }}>No invoices yet.</p> : (
-                <div style={{ overflowX:"auto" }}>
-                    <table>
-                        <thead>
-                            <tr><th>Invoice No</th><th>Tenant</th><th>Property</th><th>Amount</th><th>Month</th><th>Due Date</th><th>Method</th><th>Status</th><th>Action</th></tr>
-                        </thead>
-                        <tbody>
-                            {invoices.map(inv => (
-                                <tr key={inv._id}>
-                                    <td><strong>{inv.invoiceNo}</strong>{inv.note&&<><br/><small style={{color:"#aaa"}}>{inv.note}</small></>}</td>
-                                    <td>{inv.tenantInfo?.[0]?.name}<br/><small style={{color:"#aaa"}}>{inv.tenantInfo?.[0]?.email}</small></td>
-                                    <td>{inv.propertyInfo?.[0]?.propertyType} — {inv.propertyInfo?.[0]?.area}</td>
-                                    <td><strong>৳{inv.amount?.toLocaleString()}</strong></td>
-                                    <td>{inv.forMonth}</td>
-                                    <td style={{color:inv.status==="Overdue"?"#c0392b":"inherit"}}>{inv.dueDate?new Date(inv.dueDate).toLocaleDateString("en-GB"):"—"}</td>
-                                    <td>{inv.paymentMethod||"—"}</td>
-                                    <td>{statusBadge(inv.status)}</td>
-                                    <td>
-                                        {inv.status==="Paid"
-                                            ? <button style={{background:"#111",fontSize:"0.74rem",padding:"0.3rem 0.7rem"}} onClick={()=>setReceipt(inv)}>Receipt</button>
-                                            : <span style={{fontSize:"0.78rem",color:"#aaa"}}>Awaiting</span>}
-                                    </td>
-                                </tr>
+                <section aria-labelledby="hist-h">
+                    <h2 id="hist-h" className="mb-1">Invoice history</h2>
+                    {invoices.length === 0 ? (
+                        <EmptyState icon="receipt" title="No invoices yet">Invoices you create appear here with their payment status.</EmptyState>
+                    ) : (<>
+                        <div className="tabs mb-2" role="tablist">
+                            {FILTERS.map(f => (
+                                <button key={f} role="tab" className="tab" aria-selected={filter === f} onClick={() => setFilter(f)}>
+                                    {f} <span className="muted">({f === "All" ? invoices.length : invoices.filter(i => i.status === f).length})</span>
+                                </button>
                             ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-
-            {/* ── Receipt Modal ── */}
-            {receipt && (
-                <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setReceipt(null)}>
-                    <div style={{background:"#fff",padding:"2rem",maxWidth:460,width:"90%",border:"1px solid #e8e4dc",boxShadow:"0 20px 60px rgba(0,0,0,0.18)"}} onClick={e=>e.stopPropagation()}>
-                        <div style={{textAlign:"center",marginBottom:"1rem"}}>
-                            <div style={{fontSize:"2rem"}}>🧾</div>
-                            <h3 style={{letterSpacing:"-0.02em"}}>Payment Receipt</h3>
-                            <p style={{color:"#aaa",fontSize:"0.78rem"}}>Bariwala Rental Platform</p>
                         </div>
-                        <hr style={{borderColor:"#f0ede8"}}/>
-                        <table style={{boxShadow:"none",background:"transparent",marginTop:"0.8rem",border:"none"}}>
-                            <tbody>
-                                {[["Invoice No",receipt.invoiceNo],["Txn Ref",receipt.transactionRef],["Method",receipt.paymentMethod||"—"],["Tenant",receipt.tenantInfo?.[0]?.name],["Property",`${receipt.propertyInfo?.[0]?.propertyType} — ${receipt.propertyInfo?.[0]?.area}`],["For Month",receipt.forMonth],["Amount",`৳${receipt.amount?.toLocaleString()}`],receipt.note?["Note",receipt.note]:null,["Paid On",receipt.paidAt?new Date(receipt.paidAt).toLocaleString("en-GB"):"—"]].filter(Boolean).map(([l,v])=>(
-                                    <tr key={l} style={{background:"transparent"}}>
-                                        <td style={{border:"none",padding:"0.28rem 0.5rem",color:"#aaa",fontWeight:600,fontSize:"0.8rem",width:"40%"}}>{l}</td>
-                                        <td style={{border:"none",padding:"0.28rem 0.5rem",fontSize:"0.82rem",color:"#111"}}>{v}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        <hr style={{marginTop:"0.8rem",borderColor:"#f0ede8"}}/>
-                        <p style={{textAlign:"center",color:"#2e7d32",fontWeight:700,marginTop:"0.8rem",fontSize:"0.85rem"}}>✅ Payment Verified</p>
-                        <button style={{width:"100%",marginTop:"0.8rem",background:"#111"}} onClick={()=>setReceipt(null)}>Close</button>
-                    </div>
-                </div>
-            )}
+                        {shown.length === 0 ? <EmptyState icon="search" title={`No ${filter.toLowerCase()} invoices`} /> : (
+                            <div className="table-wrap">
+                                <table style={{ minWidth: 820 }}>
+                                    <thead><tr><th>Invoice</th><th>Tenant</th><th>Property</th><th>Month</th><th>Amount</th><th>Due</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                                    <tbody>
+                                        {shown.map(i => {
+                                            const d = i.dueDate ? daysUntil(i.dueDate) : null;
+                                            return (
+                                                <tr key={i._id}>
+                                                    <td><strong>{i.invoiceNo}</strong>{i.note && <span className="sub">{i.note}</span>}</td>
+                                                    <td>{i.tenantInfo?.[0]?.name || "—"}<span className="sub">{i.tenantInfo?.[0]?.email}</span></td>
+                                                    <td>{i.propertyInfo?.[0] ? `${i.propertyInfo[0].propertyType} — ${i.propertyInfo[0].area}` : "—"}</td>
+                                                    <td>{i.forMonth}</td>
+                                                    <td><strong>{money(i.amount)}</strong></td>
+                                                    <td>{i.status === "Paid" ? <>Paid {fmtDate(i.paidAt)}<span className="sub">{i.paymentMethod}</span></> : <>{fmtDate(i.dueDate)}<span className="sub" style={{ color: d < 0 ? "var(--danger)" : undefined }}>{d === null ? "" : d < 0 ? `${-d}d overdue` : d === 0 ? "due today" : `in ${d}d`}</span></>}</td>
+                                                    <td><StatusBadge status={i.status} /></td>
+                                                    <td>
+                                                        {i.status === "Paid" && <Button size="sm" variant="secondary" icon="receipt" onClick={() => setReceipt(i)}>Receipt</Button>}
+                                                        {i.status !== "Paid" && !i.extendedDays && <Button size="sm" variant="secondary" icon="clock" onClick={() => setExtend(i)}>Extend</Button>}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </>)}
+                </section>
+            </div>)}
+
+            {receipt && <ReceiptModal invoice={receipt} viewer="landlord" onClose={() => setReceipt(null)} />}
+            {extend && <ExtendModal invoice={extend} onClose={() => setExtend(null)} onDone={() => { setExtend(null); inv.reload(true); }} />}
         </div>
     );
 };
 
 export default LandlordInvoices;
-

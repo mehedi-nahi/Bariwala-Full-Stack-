@@ -18,7 +18,12 @@ const cloudinaryStorage = {
                 transformation: [{ quality: "auto", fetch_format: "auto" }],
             },
             (error, result) => {
-                if (error) return cb(error);
+                if (error) {
+                    console.error("Cloudinary upload failed:", error.message);
+                    const err = new Error("Image upload failed. Please try again, or use a smaller image.");
+                    err.isUploadError = true;
+                    return cb(err);
+                }
                 cb(null, {
                     path: result.secure_url,
                     filename: result.public_id,
@@ -44,5 +49,16 @@ const uploadFile = multer({
         cb(null, true);
     },
 });
+
+// Removes images uploaded for a request that then failed (validation error etc.), so rejected
+// submissions do not leave orphaned files on Cloudinary. Mount right after the multer middleware.
+uploadFile.cleanupOnError = (req, res, next) => {
+    res.on("finish", () => {
+        if (res.statusCode < 400) return;
+        const files = req.files || (req.file ? [req.file] : []);
+        files.forEach(f => f.filename && cloudinary.uploader.destroy(f.filename).catch(() => {}));
+    });
+    next();
+};
 
 module.exports = uploadFile;

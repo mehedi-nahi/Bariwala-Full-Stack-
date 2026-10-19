@@ -4,7 +4,8 @@ export const createItemAPI   = (form)      => API.post("/create-item", form);
 export const allItemsAPI     = (params)    => API.get("/all-items", { params });
 export const singleItemAPI   = (id)        => API.get(`/single-item/${id}`);
 export const myItemsAPI      = ()          => API.get("/my-items");
+export const myOrdersAPI     = ()          => API.get("/my-orders");
 export const updateItemAPI   = (id, data)  => API.post(`/update-item/${id}`, data);
 export const deleteItemAPI   = (id)        => API.delete(`/delete-item/${id}`);
-export const markAsSoldAPI   = (id, data)  => API.post(`/mark-sold/${id}`, data);
-
+export const markAsSoldAPI   = (id)        => API.post(`/mark-sold/${id}`);
+export const checkoutAPI     = (data)      => API.post("/checkout", data);

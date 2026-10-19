@@ -1,76 +1,80 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { adminAllTransactionsAPI } from "../../api/adminAPI";
+import { getErrorMessage } from "../../utils/errors";
+import { fmtDate, money } from "../../utils/format";
+import useDocumentTitle from "../../hooks/useDocumentTitle";
+import { EmptyState, ErrorState, PageHeader, Pagination, Stat, StatusBadge, TableSkeleton } from "../../components/ui";
 
-const statusBadge = (s) => {
-    const cls = s === "Paid" ? "green" : s === "Overdue" ? "red" : "yellow";
-    return <span className={`badge ${cls}`}>{s}</span>;
-};
+const PER_PAGE = 20;
+const FILTERS = ["", "Paid", "Pending", "Overdue"];
 
 const AdminTransactions = () => {
-    const [transactions, setTransactions] = useState([]);
-    const [total,        setTotal]        = useState(0);
-    const [page,         setPage]         = useState(1);
-    const [loading,      setLoading]      = useState(true);
-    const [error,        setError]        = useState("");
-    const PER_PAGE = 20;
+    useDocumentTitle("Transactions");
+    const [status, setStatus] = useState("");
+    const [page, setPage] = useState(1);
+    const [state, setState] = useState({ rows: [], count: 0, summary: {}, loading: true, error: "" });
 
-    const load = async (p = page) => {
-        setLoading(true); setError("");
+    const load = useCallback(async () => {
+        setState(s => ({ ...s, loading: true, error: "" }));
         try {
-            const res = await adminAllTransactionsAPI({ pageNo: p, perPage: PER_PAGE });
-            const facet = res.data.data[0] || {};
-            setTransactions(facet.transactions || []);
-            setTotal(facet.totalCount?.[0]?.count || 0);
-        } catch (e) {
-            setError(e.response?.data?.message || "Failed to load transactions.");
-        } finally { setLoading(false); }
-    };
+            const res = await adminAllTransactionsAPI({ pageNo: page, perPage: PER_PAGE, status: status || undefined });
+            const f = res.data.data[0] || {};
+            setState({
+                rows: f.transactions || [], count: f.totalCount?.[0]?.count || 0, loading: false, error: "",
+                summary: { paid: f.revenue?.[0], pending: f.pending?.[0], overdue: f.overdue?.[0] },
+            });
+        } catch (e) { setState(s => ({ ...s, loading: false, error: getErrorMessage(e) })); }
+    }, [page, status]);
 
-    useEffect(() => { load(page); }, [page]); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
 
-    const totalPages = Math.ceil(total / PER_PAGE);
+    const totalPages = Math.max(1, Math.ceil(state.count / PER_PAGE));
+    const { paid, pending, overdue } = state.summary;
 
     return (
-        <div className="container">
-            <h2>All Transactions <span style={{ fontSize:"0.85rem", color:"#aaa", fontWeight:400 }}>({total} total)</span></h2>
-            {error && <p className="error">{error}</p>}
-            {loading ? (
-                <p style={{ color:"#aaa", textAlign:"center", padding:"2rem" }}>Loading transactions...</p>
-            ) : (
-                <>
-                    <table>
-                        <thead>
-                            <tr><th>Invoice No</th><th>Tenant</th><th>Landlord</th><th>Property</th><th>Amount</th><th>Month</th><th>Method</th><th>Date</th><th>Status</th></tr>
-                        </thead>
+        <div className="container page">
+            <PageHeader title="Transactions" subtitle="Every rent invoice on the platform and its payment status." />
+
+            <div className="stats mb-3">
+                <Stat icon="money" label="Collected" value={money(paid?.total || 0)} tone="success" />
+                <Stat icon="check-circle" label="Paid invoices" value={paid?.count || 0} tone="success" />
+                <Stat icon="clock" label={`Pending (${pending?.count || 0})`} value={money(pending?.total || 0)} tone={pending?.count ? "warning" : undefined} />
+                <Stat icon="alert" label={`Overdue (${overdue?.count || 0})`} value={money(overdue?.total || 0)} tone={overdue?.count ? "danger" : undefined} />
+            </div>
+
+            <div className="tabs mb-2" role="tablist">
+                {FILTERS.map(f => <button key={f || "all"} role="tab" className="tab" aria-selected={status === f} onClick={() => { setStatus(f); setPage(1); }}>{f || "All"}</button>)}
+            </div>
+
+            {state.loading && !state.rows.length && <TableSkeleton rows={6} />}
+            {state.error && <ErrorState message={state.error} onRetry={load} />}
+            {!state.loading && !state.error && state.rows.length === 0 && <EmptyState icon="receipt" title="No transactions">{status ? `No ${status.toLowerCase()} invoices.` : "No invoices have been created yet."}</EmptyState>}
+
+            {!state.error && state.rows.length > 0 && (<>
+                <div className="table-wrap" style={{ opacity: state.loading ? 0.6 : 1 }}>
+                    <table style={{ minWidth: 860 }}>
+                        <thead><tr><th>Invoice</th><th>Tenant</th><th>Landlord</th><th>Property</th><th>Month</th><th>Amount</th><th>Method</th><th>Paid / due</th><th>Status</th></tr></thead>
                         <tbody>
-                            {transactions.length === 0 && <tr><td colSpan="9" style={{ textAlign:"center", color:"#aaa" }}>No transactions yet.</td></tr>}
-                            {transactions.map(t => (
+                            {state.rows.map(t => (
                                 <tr key={t._id}>
-                                    <td><strong>{t.invoiceNo}</strong></td>
+                                    <td><strong>{t.invoiceNo}</strong>{t.transactionRef && <span className="sub mono">{t.transactionRef}</span>}</td>
                                     <td>{t.tenantInfo?.[0]?.name || "—"}</td>
                                     <td>{t.landlordInfo?.[0]?.name || "—"}</td>
                                     <td>{t.propertyInfo?.[0]?.area || "—"}</td>
-                                    <td>৳{t.amount?.toLocaleString()}</td>
                                     <td>{t.forMonth}</td>
+                                    <td><strong>{money(t.amount)}</strong></td>
                                     <td>{t.paymentMethod || "—"}</td>
-                                    <td>{t.paidAt ? new Date(t.paidAt).toLocaleDateString("en-GB") : "—"}</td>
-                                    <td>{statusBadge(t.status)}</td>
+                                    <td>{t.status === "Paid" ? fmtDate(t.paidAt) : <>Due {fmtDate(t.dueDate)}</>}</td>
+                                    <td><StatusBadge status={t.status} /></td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
-                    {totalPages > 1 && (
-                        <div style={{ display:"flex", gap:"0.5rem", justifyContent:"center", marginTop:"1.5rem" }}>
-                            <button disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                            <span style={{ padding:"0.4rem 0.8rem", fontSize:"0.85rem", color:"#888" }}>Page {page} / {totalPages}</span>
-                            <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-                        </div>
-                    )}
-                </>
-            )}
+                </div>
+                <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+            </>)}
         </div>
     );
 };
 
 export default AdminTransactions;
-

@@ -1,14 +1,31 @@
-const mongoose         = require("mongoose");
-const userModel        = require("../models/userModel");
+const userModel       = require("../models/userModel");
 const propertyModel    = require("../models/propertyModel");
 const marketplaceModel = require("../models/marketplaceModel");
 const paymentModel     = require("../models/paymentModel");
 const reportModel      = require("../models/reportModel");
+const { sendError }                      = require("../utility/errorUtility");
+const { isId, escapeRegex, clampInt }    = require("../utility/validators");
+
+const paging = (query, defaultPerPage = 20) => {
+    const pageNo  = clampInt(query.pageNo, 1, 1, 100000);
+    const perPage = clampInt(query.perPage, defaultPerPage, 1, 100);
+    return { pageNo, perPage, skip: (pageNo - 1) * perPage };
+};
 
 exports.allUsers = async (req, res) => {
     try {
-        let { pageNo = 1, perPage = 20 } = req.query;
-        let skipRow = (Number(pageNo) - 1) * Number(perPage);
+        const { skip, perPage } = paging(req.query);
+        const { q, role, status } = req.query;
+
+        // filters apply to the table only – the headline counts always describe the whole platform
+        const filter = {};
+        if (["landlord", "tenant", "marketplace", "admin"].includes(role)) filter.role = role;
+        if (status === "blocked") filter.isBlocked = true;
+        if (status === "active")  filter.isBlocked = false;
+        if (typeof q === "string" && q.trim()) {
+            const rx = { $regex: escapeRegex(q.trim()), $options: "i" };
+            filter.$or = [{ name: rx }, { email: rx }];
+        }
 
         let result = await userModel.aggregate([
             {
@@ -17,10 +34,12 @@ exports.allUsers = async (req, res) => {
                     landlordCount: [{ $match: { role: "landlord" } }, { $count: "count" }],
                     tenantCount:   [{ $match: { role: "tenant"   } }, { $count: "count" }],
                     blockedCount:  [{ $match: { isBlocked: true  } }, { $count: "count" }],
+                    filteredCount: [{ $match: filter }, { $count: "count" }],
                     users: [
+                        { $match:   filter },
                         { $sort:    { createdAt: -1 } },
-                        { $skip:    skipRow },
-                        { $limit:   Number(perPage) },
+                        { $skip:    skip },
+                        { $limit:   perPage },
                         { $project: { password: 0 } }
                     ]
                 }
@@ -28,21 +47,23 @@ exports.allUsers = async (req, res) => {
         ]);
         res.status(200).json({ success: true, message: "All users", data: result });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.blockUser = async (req, res) => {
     try {
         let { id } = req.params;
-        if (!mongoose.Types.ObjectId.isValid(id))
+        if (!isId(id))
             return res.status(400).json({ success: false, message: "Invalid user ID" });
 
         let user = await userModel.findById(id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
+        if (user.role === "admin")
+            return res.status(400).json({ success: false, message: "Admin accounts cannot be blocked." });
 
         let newBlockedState = !user.isBlocked;
-        let updated = await userModel.findByIdAndUpdate(id, { isBlocked: newBlockedState }, { new: true }).select("-password");
+        let updated = await userModel.findByIdAndUpdate(id, { isBlocked: newBlockedState }, { returnDocument: "after" }).select("-password");
 
         res.status(200).json({
             success: true,
@@ -50,63 +71,76 @@ exports.blockUser = async (req, res) => {
             data: { id: updated._id, isBlocked: updated.isBlocked }
         });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.removeListing = async (req, res) => {
     try {
         let { id } = req.params;
-        if (!mongoose.Types.ObjectId.isValid(id))
+        if (!isId(id))
             return res.status(400).json({ success: false, message: "Invalid listing ID" });
 
-        let data = await propertyModel.findByIdAndUpdate(id, { isRemoved: true }, { new: true });
+        let data = await propertyModel.findByIdAndUpdate(id, { isRemoved: true }, { returnDocument: "after" });
         if (!data) return res.status(404).json({ success: false, message: "Listing not found" });
 
         res.status(200).json({ success: true, message: "Listing removed successfully", data });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.removeItem = async (req, res) => {
     try {
         let { id } = req.params;
-        if (!mongoose.Types.ObjectId.isValid(id))
+        if (!isId(id))
             return res.status(400).json({ success: false, message: "Invalid item ID" });
 
-        let data = await marketplaceModel.findByIdAndUpdate(id, { isRemoved: true }, { new: true });
+        let data = await marketplaceModel.findByIdAndUpdate(id, { isRemoved: true }, { returnDocument: "after" });
+        if (!data) return res.status(404).json({ success: false, message: "Item not found" });
         res.status(200).json({ success: true, message: "Item removed successfully", data });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.allReports = async (req, res) => {
     try {
-        let { status, pageNo = 1, perPage = 20 } = req.query;
-        let skipRow = (Number(pageNo) - 1) * Number(perPage);
+        const { skip, perPage } = paging(req.query);
+        const { status } = req.query;
         let matchStage = {};
-        if (status) matchStage.status = status;
+        if (["Pending", "Reviewed", "Resolved"].includes(status)) matchStage.status = status;
 
         let result = await reportModel.aggregate([
-            { $match: matchStage },
             {
                 $facet: {
-                    totalCount: [{ $count: "count" }],
+                    totalCount:    [{ $match: matchStage }, { $count: "count" }],
+                    pendingCount:  [{ $match: { status: "Pending"  } }, { $count: "count" }],
+                    reviewedCount: [{ $match: { status: "Reviewed" } }, { $count: "count" }],
+                    resolvedCount: [{ $match: { status: "Resolved" } }, { $count: "count" }],
                     reports: [
+                        { $match: matchStage },
                         { $sort: { createdAt: -1 } },
-                        { $skip: skipRow },
-                        { $limit: Number(perPage) },
-                        { $lookup: { from: "users", localField: "reportedBy", foreignField: "_id", as: "reportedByInfo" } },
-                        { $project: { "reportedByInfo.password": 0 } }
+                        { $skip: skip },
+                        { $limit: perPage },
+                        { $lookup: { from: "users",        localField: "reportedBy",     foreignField: "_id", as: "reportedByInfo" } },
+                        // what was reported – lets the admin see the target instead of a bare ID
+                        { $lookup: { from: "properties",   localField: "reportedEntity", foreignField: "_id", as: "propertyTarget" } },
+                        { $lookup: { from: "marketplaces", localField: "reportedEntity", foreignField: "_id", as: "itemTarget" } },
+                        { $lookup: { from: "users",        localField: "reportedEntity", foreignField: "_id", as: "userTarget" } },
+                        { $project: {
+                            "reportedByInfo.password": 0, "reportedByInfo.phone": 0, "reportedByInfo.isBlocked": 0,
+                            "propertyTarget.images": 0, "propertyTarget.facilities": 0, "propertyTarget.location": 0,
+                            "itemTarget.images": 0, "itemTarget.description": 0, "itemTarget.buyerInfo": 0,
+                            "userTarget.password": 0, "userTarget.phone": 0
+                        } }
                     ]
                 }
             }
         ]);
         res.status(200).json({ success: true, message: "All reports", data: result });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
@@ -115,31 +149,45 @@ exports.updateReport = async (req, res) => {
         let { id } = req.params;
         let { status } = req.body;
 
+        if (!isId(id))
+            return res.status(400).json({ success: false, message: "Invalid report ID" });
         if (!["Pending", "Reviewed", "Resolved"].includes(status))
             return res.status(400).json({ success: false, message: "Status must be 'Pending', 'Reviewed', or 'Resolved'." });
 
-        let data = await reportModel.findByIdAndUpdate(id, { status }, { new: true });
+        let data = await reportModel.findByIdAndUpdate(id, { status }, { returnDocument: "after" });
         if (!data) return res.status(404).json({ success: false, message: "Report not found" });
 
         res.status(200).json({ success: true, message: "Report status updated", data });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.allTransactions = async (req, res) => {
     try {
-        let { pageNo = 1, perPage = 20 } = req.query;
-        let skipRow = (Number(pageNo) - 1) * Number(perPage);
+        const { skip, perPage } = paging(req.query);
+        const { status } = req.query;
+        const matchStage = {};
+        if (["Pending", "Paid", "Overdue"].includes(status)) matchStage.status = status;
+
+        // keep overdue flags honest for the admin view too
+        await paymentModel.updateMany(
+            { status: "Pending", expiresAt: { $lte: new Date() } },
+            { $set: { status: "Overdue" } }
+        );
 
         let result = await paymentModel.aggregate([
             {
                 $facet: {
-                    totalCount: [{ $count: "count" }],
+                    totalCount: [{ $match: matchStage }, { $count: "count" }],
+                    revenue:    [{ $match: { status: "Paid" } }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }],
+                    pending:    [{ $match: { status: "Pending" } }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }],
+                    overdue:    [{ $match: { status: "Overdue" } }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }],
                     transactions: [
+                        { $match: matchStage },
                         { $sort: { createdAt: -1 } },
-                        { $skip: skipRow },
-                        { $limit: Number(perPage) },
+                        { $skip: skip },
+                        { $limit: perPage },
                         { $lookup: { from: "properties", localField: "property", foreignField: "_id", as: "propertyInfo" } },
                         { $lookup: { from: "users",      localField: "tenant",   foreignField: "_id", as: "tenantInfo" } },
                         { $lookup: { from: "users",      localField: "landlord", foreignField: "_id", as: "landlordInfo" } },
@@ -150,14 +198,14 @@ exports.allTransactions = async (req, res) => {
         ]);
         res.status(200).json({ success: true, message: "All transactions", data: result });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.allMarketplaceItems = async (req, res) => {
     try {
-        let { pageNo = 1, perPage = 20, status } = req.query;
-        let skipRow = (Number(pageNo) - 1) * Number(perPage);
+        const { skip, perPage } = paging(req.query);
+        const { status } = req.query;
         let matchStage = {};
         if (status === "active")   matchStage = { isRemoved: false, isSold: false };
         else if (status === "sold")    matchStage = { isSold: true };
@@ -173,8 +221,8 @@ exports.allMarketplaceItems = async (req, res) => {
                     removedCount: [{ $match: { isRemoved: true, isSold: false } },  { $count: "count" }],
                     items: [
                         { $sort: { createdAt: -1 } },
-                        { $skip: skipRow },
-                        { $limit: Number(perPage) },
+                        { $skip: skip },
+                        { $limit: perPage },
                         { $lookup: { from: "users", localField: "seller", foreignField: "_id", as: "sellerInfo" } },
                         { $project: { "sellerInfo.password": 0 } }
                     ]
@@ -183,14 +231,13 @@ exports.allMarketplaceItems = async (req, res) => {
         ]);
         res.status(200).json({ success: true, message: "All marketplace items", data: result });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.allMarketplaceUsers = async (req, res) => {
     try {
-        let { pageNo = 1, perPage = 20 } = req.query;
-        let skipRow = (Number(pageNo) - 1) * Number(perPage);
+        const { skip, perPage } = paging(req.query);
 
         let result = await userModel.aggregate([
             { $match: { role: "marketplace" } },
@@ -199,8 +246,8 @@ exports.allMarketplaceUsers = async (req, res) => {
                     totalCount: [{ $count: "count" }],
                     users: [
                         { $sort:    { createdAt: -1 } },
-                        { $skip:    skipRow },
-                        { $limit:   Number(perPage) },
+                        { $skip:    skip },
+                        { $limit:   perPage },
                         { $project: { password: 0 } }
                     ]
                 }
@@ -208,6 +255,27 @@ exports.allMarketplaceUsers = async (req, res) => {
         ]);
         res.status(200).json({ success: true, message: "All marketplace users", data: result });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
+    }
+};
+
+// Platform-wide numbers for the admin dashboard in a single call
+exports.overview = async (req, res) => {
+    try {
+        const [users, pendingReports, txn, items] = await Promise.all([
+            userModel.aggregate([{ $group: { _id: "$role", count: { $sum: 1 }, blocked: { $sum: { $cond: ["$isBlocked", 1, 0] } } } }]),
+            reportModel.aggregate([{ $match: { status: "Pending" } }, { $group: { _id: "$reportType", count: { $sum: 1 } } }]),
+            paymentModel.aggregate([{ $group: { _id: "$status", count: { $sum: 1 }, total: { $sum: "$amount" } } }]),
+            marketplaceModel.aggregate([{ $group: {
+                _id: null,
+                total:  { $sum: 1 },
+                active: { $sum: { $cond: [{ $and: [{ $eq: ["$isRemoved", false] }, { $eq: ["$isSold", false] }] }, 1, 0] } },
+                sold:   { $sum: { $cond: ["$isSold", 1, 0] } },
+                soldValue: { $sum: { $cond: ["$isSold", "$price", 0] } }
+            } }])
+        ]);
+        res.status(200).json({ success: true, data: { users, pendingReports, txn, items: items[0] || {} } });
+    } catch (e) {
+        sendError(res, e);
     }
 };

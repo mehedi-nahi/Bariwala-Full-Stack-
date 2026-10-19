@@ -1,5 +1,6 @@
 import API from "./axiosInstance";
 
+export const adminOverviewAPI            = ()           => API.get("/admin/overview");
 export const adminAllUsersAPI            = (params)     => API.get("/admin/all-users", { params });
 export const adminBlockUserAPI           = (id)         => API.post(`/admin/block-user/${id}`);
 export const adminRemoveListingAPI       = (id)         => API.delete(`/admin/remove-listing/${id}`);

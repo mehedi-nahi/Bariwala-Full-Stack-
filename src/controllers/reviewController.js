@@ -1,5 +1,8 @@
-const mongoose     = require("mongoose");
-const reviewModel  = require("../models/reviewModel");
+const mongoose           = require("mongoose");
+const reviewModel        = require("../models/reviewModel");
+const rentalRequestModel = require("../models/rentalRequestModel");
+const { sendError }      = require("../utility/errorUtility");
+const { isId }           = require("../utility/validators");
 
 exports.createReview = async (req, res) => {
     try {
@@ -9,12 +12,33 @@ exports.createReview = async (req, res) => {
 
         if (!["tenant", "landlord"].includes(role))
             return res.status(403).json({ success: false, message: "Only tenant or landlord can submit reviews." });
-        if (!rating || Number(rating) < 1 || Number(rating) > 5)
+        if (!isId(revieweeId) || !isId(propertyId))
+            return res.status(400).json({ success: false, message: "Invalid user or property." });
+        rating = Number(rating);
+        if (!Number.isInteger(rating) || rating < 1 || rating > 5)
             return res.status(400).json({ success: false, message: "Rating must be between 1 and 5." });
+        comment = typeof comment === "string" ? comment.trim() : "";
+        if (comment.length > 500)
+            return res.status(400).json({ success: false, message: "Comment can be at most 500 characters." });
         if (role === "tenant" && reviewType !== "tenant-to-landlord")
             return res.status(403).json({ success: false, message: "Tenants can only rate landlords." });
         if (role === "landlord" && reviewType !== "landlord-to-tenant")
             return res.status(403).json({ success: false, message: "Landlords can only rate tenants." });
+        if (String(revieweeId) === String(reviewerId))
+            return res.status(400).json({ success: false, message: "You cannot review yourself." });
+
+        // Reviews must be backed by a real relationship: an accepted rental request between the two.
+        const pair = role === "tenant"
+            ? { tenant: reviewerId, landlord: revieweeId }
+            : { tenant: revieweeId, landlord: reviewerId };
+        const accepted = await rentalRequestModel.exists({ ...pair, property: propertyId, status: "Accepted" });
+        if (!accepted)
+            return res.status(403).json({
+                success: false,
+                message: role === "tenant"
+                    ? "You can review a landlord after your rental request for this property was accepted."
+                    : "You can review a tenant after accepting their rental request for this property."
+            });
 
         let existing = await reviewModel.findOne({ reviewer: reviewerId, reviewee: revieweeId, property: propertyId, reviewType });
         if (existing)
@@ -23,21 +47,21 @@ exports.createReview = async (req, res) => {
         let data = await reviewModel.create({ reviewer: reviewerId, reviewee: revieweeId, property: propertyId, reviewType, rating, comment });
         res.status(201).json({ success: true, message: "Review submitted successfully", data });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
 
 exports.userReviews = async (req, res) => {
     try {
         let { userId } = req.params;
-        if (!mongoose.Types.ObjectId.isValid(userId))
+        if (!isId(userId))
             return res.status(400).json({ success: false, message: "Invalid user ID" });
 
         let reviews = await reviewModel.aggregate([
             { $match: { reviewee: new mongoose.Types.ObjectId(userId) } },
             { $lookup: { from: "users",      localField: "reviewer", foreignField: "_id", as: "reviewerInfo" } },
             { $lookup: { from: "properties", localField: "property", foreignField: "_id", as: "propertyInfo" } },
-            { $project: { "reviewerInfo.password": 0 } },
+            { $project: { "reviewerInfo.password": 0, "reviewerInfo.email": 0, "reviewerInfo.phone": 0, "reviewerInfo.isBlocked": 0 } },
             { $sort: { createdAt: -1 } }
         ]);
 
@@ -51,6 +75,6 @@ exports.userReviews = async (req, res) => {
 
         res.status(200).json({ success: true, message: "User reviews", avgRating, totalReviews, data: reviews });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.toString(), message: e.message });
+        sendError(res, e);
     }
 };
